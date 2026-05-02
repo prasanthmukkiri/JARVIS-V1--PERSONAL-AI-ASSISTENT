@@ -4,7 +4,26 @@ import threading
 import json
 import sys
 import traceback
+import socket
+import logging
+import time
 from pathlib import Path
+# ── Logging setup ─────────────────────────────────────────────────────────────
+logging.basicConfig(
+    filename="jarvis_log.txt",
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    encoding="utf-8",
+)
+logger = logging.getLogger("jarvis")
+
+from agent.error_recovery import get_recovery_manager
+from agent.metrics import get_metrics
+from wake_word import create_wake_word_detector
+import wake_word as wake_word_module
+
+from actions.emotion_detector  import detect_emotion
+
 
 import sounddevice as sd
 from google import genai
@@ -48,9 +67,97 @@ RECEIVE_SAMPLE_RATE = 24000
 CHUNK_SIZE          = 1024
 
 
+_DIRECT_MESSAGE_PATTERNS = [
+    re.compile(
+        r"^\s*(?:please\s+)?send\s+message\s+to\s+(?P<receiver>.+?)\s+on\s+(?P<platform>whatsapp|telegram|signal|discord|instagram|messenger)\s+saying\s+(?P<message>.+?)\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*(?:please\s+)?send\s+message\s+to\s+(?P<receiver>.+?)\s+saying\s+(?P<message>.+?)\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*(?:please\s+)?send\s+(?P<message>.+?)\s+to\s+(?P<receiver>.+?)\s+on\s+(?P<platform>whatsapp|telegram|signal|discord|instagram|messenger)\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*(?:please\s+)?send\s+(?P<message>.+?)\s+to\s+(?P<receiver>.+?)\s*$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^\s*(?:please\s+)?message\s+(?P<receiver>.+?)\s+saying\s+(?P<message>.+?)\s*$",
+        re.IGNORECASE,
+    ),
+]
+
+
+def _clean_direct_command_value(value: str) -> str:
+    return value.strip().strip('"').strip("'").strip()
+
+
+def _parse_direct_message_command(text: str) -> dict | None:
+    normalized = re.sub(r"\s+", " ", (text or "")).strip()
+    if not normalized:
+        return None
+
+    for pattern in _DIRECT_MESSAGE_PATTERNS:
+        match = pattern.match(normalized)
+        if not match:
+            continue
+
+        receiver = _clean_direct_command_value(match.group("receiver"))
+        message = _clean_direct_command_value(match.group("message"))
+        platform = _clean_direct_command_value(match.groupdict().get("platform") or "WhatsApp")
+
+        if receiver and message:
+            return {
+                "receiver": receiver,
+                "message_text": message,
+                "platform": platform or "WhatsApp",
+            }
+
+    return None
+
+
 def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
+    """
+    Loads the Gemini API key securely.
+    Priority: Windows Credential Manager → api_keys.json (legacy fallback)
+    On first run with a JSON key, automatically migrates it to Credential Manager.
+    """
+    # 1. Try Windows Credential Manager first (most secure)
+    try:
+        import keyring
+        key = keyring.get_password("JarvisAI", "gemini_api_key")
+        if key:
+            return key
+    except Exception:
+        pass  # keyring not available — fall through to JSON
+
+    # 2. Fall back to JSON file
+    try:
+        with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
+            key = json.load(f)["gemini_api_key"]
+        if key:
+            # Auto-migrate to Credential Manager for future runs
+            try:
+                import keyring
+                keyring.set_password("JarvisAI", "gemini_api_key", key)
+                print("[Security] ✅ API key migrated to Windows Credential Manager.")
+                print("[Security]    Your api_keys.json can now be deleted for safety.")
+            except Exception as e:
+                print(f"[Security] ⚠️  Could not migrate to Credential Manager: {e}")
+                print("[Security]    Install keyring: pip install keyring")
+            return key
+    except FileNotFoundError:
+        raise RuntimeError(
+            "No API key found!\n"
+            "Either:\n"
+            "  1. Run: python -c \"import keyring; keyring.set_password('JarvisAI', 'gemini_api_key', 'YOUR_KEY')\"\n"
+            "  2. Or put your key in config/api_keys.json as: {\"gemini_api_key\": \"YOUR_KEY\"}"
+        )
+    except (KeyError, json.JSONDecodeError) as e:
+        raise RuntimeError(f"Invalid api_keys.json: {e}")
 
 
 def _load_system_prompt() -> str:
@@ -121,11 +228,14 @@ TOOL_DECLARATIONS = [
     },
     {
         "name": "send_message",
-        "description": "Sends a text message via WhatsApp, Telegram, or other messaging platform.",
+        "description": (
+            "Sends a text message via WhatsApp, Telegram, or other messaging platform. "
+            "Preserve the receiver contact name exactly as the user said it; do not translate or transliterate names."
+        ),
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "receiver":     {"type": "STRING", "description": "Recipient contact name"},
+                "receiver":     {"type": "STRING", "description": "Recipient contact name exactly as provided by the user; never translate or transliterate it"},
                 "message_text": {"type": "STRING", "description": "The message to send"},
                 "platform":     {"type": "STRING", "description": "Platform: WhatsApp, Telegram, etc."}
             },
@@ -375,6 +485,29 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "forget_memory",
+        "description": (
+            "Delete a specific memory the user wants forgotten. "
+            "Call when user says 'forget that', 'remove that', 'stop remembering X', "
+            "'delete my preference for X'. Do NOT call for normal commands. "
+            "Call silently — do NOT announce you are forgetting."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "category": {
+                    "type": "STRING",
+                    "description": "identity | preferences | projects | relationships | wishes | notes"
+                },
+                "key": {
+                    "type": "STRING",
+                    "description": "The exact snake_case key to delete (e.g. favorite_food, browser_preference)"
+                },
+            },
+            "required": ["category", "key"]
+        }
+    },
+    {
         "name": "shutdown_jarvis",
         "description": (
             "Shuts down the assistant completely. "
@@ -420,9 +553,17 @@ TOOL_DECLARATIONS = [
 ]
 
 
+def _is_online() -> bool:
+    try:
+        socket.create_connection(("8.8.8.8", 53), timeout=2)
+        return True
+    except OSError:
+        return False
+
+
 class JarvisLive:
 
-    def __init__(self, ui: JarvisUI):
+    def __init__(self, ui: JarvisUI, add_log=None, update_state=None):
         self.ui             = ui
         self.session        = None
         self.audio_in_queue = None
@@ -432,9 +573,36 @@ class JarvisLive:
         self._speaking_lock = threading.Lock()
         self.ui.on_text_command = self._on_text_command
         self._turn_done_event: asyncio.Event | None = None
+        self._add_log = add_log
+        self._update_state = update_state
+        self._metrics = get_metrics()
+        self._recovery = get_recovery_manager()
+        self._started_at = time.time()
 
     def _on_text_command(self, text: str):
-        if not self._loop or not self.session:
+        if not self._loop:
+            return
+
+        direct_message = _parse_direct_message_command(text)
+        if direct_message:
+            async def _run_direct_message() -> None:
+                result = await self._loop.run_in_executor(
+                    None,
+                    lambda: send_message(
+                        parameters=direct_message,
+                        response=None,
+                        player=self.ui,
+                        session_memory=None,
+                    ),
+                )
+                logger.info(f"DIRECT_SEND: {result}")
+                if self._add_log:
+                    self._add_log(f"[DIRECT] {result}", "INFO")
+
+            asyncio.run_coroutine_threadsafe(_run_direct_message(), self._loop)
+            return
+
+        if not self.session:
             return
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
@@ -447,6 +615,10 @@ class JarvisLive:
     def set_speaking(self, value: bool):
         with self._speaking_lock:
             self._is_speaking = value
+        try:
+            wake_word_module.set_jarvis_speaking(value)
+        except Exception:
+            pass
         if value:
             self.ui.set_state("SPEAKING")
         elif not self.ui.muted:
@@ -477,13 +649,41 @@ class JarvisLive:
 
         now      = datetime.now()
         time_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
+        hour     = now.hour
+        if 22 <= hour or hour < 6:
+            time_mode = "It is late night. Keep all responses very short and quiet. Speak softly."
+        elif 6 <= hour < 9:
+            time_mode = "It is morning. Be brief, energetic, and upbeat."
+        elif 9 <= hour < 18:
+            time_mode = "Normal daytime — full responses as needed."
+        else:
+            time_mode = "It is evening. Slightly more relaxed tone."
         time_ctx = (
             f"[CURRENT DATE & TIME]\n"
             f"Right now it is: {time_str}\n"
+            f"Time guidance: {time_mode}\n"
             f"Use this to calculate exact times for reminders.\n\n"
         )
 
+        emotion_ctx = ""
+        try:
+            from core.emotion_detector import get_emotion_detector
+
+            detector = get_emotion_detector()
+            if detector.enabled:
+                emotion_note = detector.get_emotion_for_response()
+                if emotion_note and emotion_note != "neutral":
+                    emotion_ctx = (
+                        f"[USER EMOTION CONTEXT]\n"
+                        f"{emotion_note}\n"
+                        f"Adapt tone, empathy, and pacing to this emotion.\n\n"
+                    )
+        except Exception as e:
+            logger.debug(f"Emotion context unavailable: {e}")
+
         parts = [time_ctx]
+        if emotion_ctx:
+            parts.append(emotion_ctx)
         if mem_str:
             parts.append(mem_str)
         parts.append(sys_prompt)
@@ -507,8 +707,13 @@ class JarvisLive:
     async def _execute_tool(self, fc) -> types.FunctionResponse:
         name = fc.name
         args = dict(fc.args or {})
+        started_at = time.perf_counter()
+        success = True
 
         print(f"[JARVIS] 🔧 {name}  {args}")
+        logger.info(f"TOOL: {name} | ARGS: {args}")
+        if self._add_log:
+            self._add_log(f"[TOOL] Executing {name}...", "INFO")
         self.ui.set_state("THINKING")
 
         # ── save_memory: sessiz ve hızlı ──────────────────────────────────────
@@ -521,6 +726,26 @@ class JarvisLive:
                 print(f"[Memory] 💾 save_memory: {category}/{key} = {value}")
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
+            self._metrics.record_tool_execution(name, (time.perf_counter() - started_at) * 1000.0, success=True)
+            self._recovery.record_success(name)
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": "ok", "silent": True}
+            )
+
+        # ── forget_memory: silent and fast ───────────────────────────────────────
+        if name == "forget_memory":
+            from memory.memory_manager import forget_memory as _forget
+            category = args.get("category", "notes")
+            key      = args.get("key", "")
+            if key:
+                result_msg = _forget(key, category)
+                print(f"[Memory] 🗑️  forget_memory: {result_msg}")
+                logger.info(f"FORGET: {category}/{key}")
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            self._metrics.record_tool_execution(name, (time.perf_counter() - started_at) * 1000.0, success=True)
+            self._recovery.record_success(name)
             return types.FunctionResponse(
                 id=fc.id, name=name,
                 response={"result": "ok", "silent": True}
@@ -529,7 +754,24 @@ class JarvisLive:
         loop   = asyncio.get_event_loop()
         result = "Done."
 
+        def _check_result(r, default="Done."):
+            """Return result string, flag errors for speak_error if needed."""
+            if r is None:
+                return default
+            s = str(r).strip()
+            return s if s else default
+
         try:
+            if not self._recovery.is_available(name):
+                self.ui.write_log(f"SYS: {name} temporarily unavailable.")
+                if self._add_log:
+                    self._add_log(f"[RECOVERY] {name} unavailable", "WARNING")
+                result = f"Tool '{name}' is temporarily unavailable."
+                success = False
+                self._metrics.record_tool_execution(name, (time.perf_counter() - started_at) * 1000.0, success=False)
+                self._recovery.record_failure(name, result)
+                return types.FunctionResponse(id=fc.id, name=name, response={"result": result})
+
             if name == "open_app":
                 r = await loop.run_in_executor(None, lambda: open_app(parameters=args, response=None, player=self.ui))
                 result = r or f"Opened {args.get('app_name')}."
@@ -559,10 +801,18 @@ class JarvisLive:
                 result = r or "Done."
 
             elif name == "screen_process":
+                # Capture speak reference NOW — avoids stale session after reconnect
+                _speak_now = self.speak
+                _ui_now    = self.ui
                 threading.Thread(
                     target=screen_process,
-                    kwargs={"parameters": args, "response": None,
-                            "player": self.ui, "session_memory": None},
+                    kwargs={
+                        "parameters":    args,
+                        "response":      None,
+                        "player":        _ui_now,
+                        "session_memory": None,
+                        "speak":         _speak_now,
+                    },
                     daemon=True
                 ).start()
                 result = "Vision module activated. Stay completely silent — vision module will speak directly."
@@ -620,6 +870,7 @@ class JarvisLive:
 
         except Exception as e:
             result = f"Tool '{name}' failed: {e}"
+            success = False
             traceback.print_exc()
             self.speak_error(name, e)
 
@@ -627,6 +878,15 @@ class JarvisLive:
             self.ui.set_state("LISTENING")
 
         print(f"[JARVIS] 📤 {name} → {str(result)[:80]}")
+        logger.info(f"RESULT: {name} → {str(result)[:200]}")
+        duration_ms = (time.perf_counter() - started_at) * 1000.0
+        self._metrics.record_tool_execution(name, duration_ms, success=success)
+        if success:
+            self._recovery.record_success(name)
+        else:
+            self._recovery.record_failure(name, result)
+        if self._add_log:
+            self._add_log(f"[TOOL] {name} completed", "INFO")
         return types.FunctionResponse(
             id=fc.id, name=name,
             response={"result": result}
@@ -646,10 +906,13 @@ class JarvisLive:
                 jarvis_speaking = self._is_speaking
             if not jarvis_speaking and not self.ui.muted:
                 data = indata.tobytes()
-                loop.call_soon_threadsafe(
-                    self.out_queue.put_nowait,
-                    {"data": data, "mime_type": "audio/pcm"}
-                )
+                try:
+                    loop.call_soon_threadsafe(
+                        self.out_queue.put_nowait,
+                        {"data": data, "mime_type": "audio/pcm"}
+                    )
+                except Exception:
+                    pass  # drop chunk if queue is full (backpressure)
 
         try:
             with sd.InputStream(
@@ -699,11 +962,23 @@ class JarvisLive:
                             full_in = " ".join(in_buf).strip()
                             if full_in:
                                 self.ui.write_log(f"You: {full_in}")
+                                if self._add_log:
+                                    self._add_log(f"You: {full_in}", "USER")
+                                # Detect emotion from transcript and add to context
+                                try:
+                                    emotion = detect_emotion(full_in)
+                                    if emotion and emotion not in ("neutral", "unknown", ""):
+                                        self.ui.write_log(f"[Emotion] {emotion}")
+                                        logger.info(f"EMOTION: {emotion} | text: {full_in[:80]}")
+                                except Exception:
+                                    pass
                             in_buf = []
 
                             full_out = " ".join(out_buf).strip()
                             if full_out:
                                 self.ui.write_log(f"Jarvis: {full_out}")
+                                if self._add_log:
+                                    self._add_log(f"Jarvis: {full_out}", "SYSTEM")
                             out_buf = []
 
                     if response.tool_call:
@@ -784,7 +1059,11 @@ class JarvisLive:
 
                     print("[JARVIS] ✅ Connected.")
                     self.ui.set_state("LISTENING")
+                    if self._update_state:
+                        self._update_state({"awake": True, "listening": True, "last_command": "", "uptime_seconds": int(time.time() - self._started_at)})
                     self.ui.write_log("SYS: JARVIS online.")
+                    if self._add_log:
+                        self._add_log("SYS: JARVIS online.", "SYSTEM")
 
                     tg.create_task(self._send_realtime())
                     tg.create_task(self._listen_audio())
@@ -797,24 +1076,70 @@ class JarvisLive:
 
             self.set_speaking(False)
             self.ui.set_state("THINKING")
-            print("[JARVIS] 🔄 Reconnecting in 3s...")
-            await asyncio.sleep(3)
+            if not _is_online():
+                print("[JARVIS] 📡 No internet — waiting 10s...")
+                self.ui.write_log("SYS: No internet. Waiting...")
+                await asyncio.sleep(10)
+            else:
+                print("[JARVIS] 🔄 Reconnecting in 3s...")
+                await asyncio.sleep(3)
 
 
 def main():
     ui = JarvisUI("face.png")
 
+    # ── Start GUI Dashboard Server ─────────────────────────────
+    try:
+        from gui.app import start_server, add_log, update_agent_state
+        gui_thread = start_server(host="127.0.0.1", port=5555, debug=False)
+        ui.write_log("SYS: GUI Dashboard started at http://127.0.0.1:5555")
+        print("[Main] 🖥️  Dashboard at http://127.0.0.1:5555")
+    except Exception as e:
+        print(f"[Main] ⚠️  Dashboard failed to start: {e}")
+        add_log = None
+        update_agent_state = None
+ 
     def runner():
         ui.wait_for_api_key()
-        jarvis = JarvisLive(ui)
+ 
+        # ── Wake word callbacks ────────────────────────────────
+        def _on_wake(word: str):
+            ui.write_log(f"SYS: Wake word detected — '{word}'")
+            if update_agent_state:
+                update_agent_state({"awake": True, "last_command": word, "last_command_time": time.time()})
+            # If muted (sleeping), unmute automatically
+            if ui.muted:
+                ui._toggle_mute()
+ 
+        def _on_sleep():
+            ui.write_log("SYS: JARVIS entering sleep mode...")
+            if update_agent_state:
+                update_agent_state({"awake": False})
+            # Mute mic when sleeping to save resources
+            if not ui.muted:
+                ui._toggle_mute()
+ 
+        # ── Start wake word detector ───────────────────────────
+        detector = create_wake_word_detector(
+            on_wake          = _on_wake,
+            on_sleep         = _on_sleep,
+            player           = ui,
+            active_timeout_s = 30.0,   # sleep after 30s of silence
+        )
+        detector.start()
+        ui.write_log("SYS: Wake word detector active. Say 'JARVIS' to activate.")
+ 
+        # ── Start JARVIS as normal ─────────────────────────────
+        jarvis = JarvisLive(ui, add_log=add_log, update_state=update_agent_state)
         try:
             asyncio.run(jarvis.run())
         except KeyboardInterrupt:
+            detector.stop()
             print("\n🔴 Shutting down...")
-
+ 
     threading.Thread(target=runner, daemon=True).start()
     ui.root.mainloop()
-
-
+ 
+ 
 if __name__ == "__main__":
     main()

@@ -124,6 +124,11 @@ def _open_browser_url(url: str) -> bool:
         print(f"[SendMessage] ⚠️ Could not open browser: {e}")
         return False
 
+
+def _browser_action_succeeded(result: str, expected: str) -> bool:
+    result_text = (result or "").lower()
+    return expected.lower() in result_text and not result_text.startswith("could not") and "error" not in result_text
+
 def _search_in_app(query: str) -> None:
     _require_pyautogui()
     os_name = _get_os()
@@ -133,6 +138,98 @@ def _search_in_app(query: str) -> None:
     time.sleep(0.5)
     _clear_and_paste(query)
     time.sleep(1.0)
+
+
+def _send_whatsapp_web(receiver: str, message: str) -> str:
+    try:
+        from actions.browser_control import browser_control
+    except Exception:
+        return ""
+
+    try:
+        browser_control(
+            parameters={
+                "action": "go_to",
+                "browser": "chrome",
+                "url": "https://web.whatsapp.com",
+            },
+            player=None,
+        )
+        time.sleep(5.0)
+
+        search_descriptions = [
+            "Search or start new chat",
+            "Search",
+            "Search chats",
+            "Start new chat",
+        ]
+        search_result = ""
+        for description in search_descriptions:
+            search_result = browser_control(
+                parameters={
+                    "action": "smart_type",
+                    "browser": "chrome",
+                    "description": description,
+                    "text": receiver,
+                },
+                player=None,
+            )
+            if _browser_action_succeeded(search_result, "Typed into"):
+                break
+
+        if not _browser_action_succeeded(search_result, "Typed into"):
+            print(f"[SendMessage] ⚠️ WhatsApp search box not found for receiver: {receiver}")
+            return ""
+
+        enter_result = browser_control(
+            parameters={"action": "press", "browser": "chrome", "key": "Enter"},
+            player=None,
+        )
+        if not _browser_action_succeeded(enter_result, "Pressed"):
+            print(f"[SendMessage] ⚠️ WhatsApp chat open failed for receiver: {receiver}")
+            return ""
+        time.sleep(2.0)
+
+        message_result = ""
+        for description in ("Type a message", "Message", "Write a message"):
+            message_result = browser_control(
+                parameters={
+                    "action": "smart_type",
+                    "browser": "chrome",
+                    "description": description,
+                    "text": message,
+                },
+                player=None,
+            )
+            if _browser_action_succeeded(message_result, "Typed into"):
+                break
+
+        if not _browser_action_succeeded(message_result, "Typed into"):
+            fallback_result = browser_control(
+                parameters={
+                    "action": "type",
+                    "browser": "chrome",
+                    "text": message,
+                    "clear_first": False,
+                },
+                player=None,
+            )
+            if not _browser_action_succeeded(fallback_result, "Text typed"):
+                print(f"[SendMessage] ⚠️ WhatsApp message box not found for receiver: {receiver}")
+                return ""
+
+        send_result = browser_control(
+            parameters={"action": "press", "browser": "chrome", "key": "Enter"},
+            player=None,
+        )
+        if not _browser_action_succeeded(send_result, "Pressed"):
+            print(f"[SendMessage] ⚠️ WhatsApp send key failed for receiver: {receiver}")
+            return ""
+        time.sleep(0.5)
+        return f"Message sent to {receiver} via WhatsApp Web."
+    except Exception as e:
+        print(f"[SendMessage] ⚠️ WhatsApp Web flow failed: {e}")
+        return ""
 
 def _desktop_send(app_name: str, receiver: str, message: str) -> str:
     if not _open_app(app_name):
@@ -152,6 +249,9 @@ def _desktop_send(app_name: str, receiver: str, message: str) -> str:
 
 
 def _send_whatsapp(receiver: str, message: str) -> str:
+    web_result = _send_whatsapp_web(receiver, message)
+    if web_result:
+        return web_result
     return _desktop_send("WhatsApp", receiver, message)
 
 
@@ -260,6 +360,8 @@ def send_message(
     try:
         handler = _resolve_platform(platform)
         result  = handler(receiver, message_text)
+        if platform.lower().strip().startswith("whatsapp") and not result:
+            result = _desktop_send("WhatsApp", receiver, message_text)
     except Exception as e:
         result = f"Could not send message: {e}"
 

@@ -22,6 +22,7 @@ ABSOLUTE RULES:
 - NEVER reference previous step results in parameters. Every step is independent.
 - Use web_search for ANY information retrieval, research, or current data.
 - Use file_controller to save content to disk.
+- For send_message.receiver, keep the contact name exactly as the user said it; never translate or transliterate names.
 - Max 5 steps. Use the minimum steps needed.
 
 AVAILABLE TOOLS AND THEIR PARAMETERS:
@@ -74,7 +75,7 @@ screen_process
   angle: "screen" | "camera" (optional)
 
 send_message
-  receiver: string (required)
+  receiver: string (required) — exact contact name as provided by the user; do not translate or transliterate
   message_text: string (required)
   platform: string (required)
 
@@ -110,6 +111,10 @@ code_helper
 dev_agent
   description: string (required)
   language: string (optional)
+DIRECT MESSAGE EXTRACTION:
+- If the goal is a direct message request, return a single send_message step.
+- Keep receiver exactly as spoken, without translation, transliteration, or paraphrasing.
+- Keep the message text verbatim unless the user explicitly asks for translation.
 EXAMPLES:
 
 Goal: "research mechanical engineering and save it to a notepad file"
@@ -166,12 +171,124 @@ OUTPUT — return ONLY valid JSON, no markdown, no explanation, no code blocks:
 """
 
 
+_DIRECT_MESSAGE_PATTERNS = [
+  re.compile(
+    r"^\s*(?:please\s+)?send\s+message\s+to\s+(?P<receiver>.+?)\s+on\s+(?P<platform>whatsapp|telegram|signal|discord|instagram|messenger)\s+saying\s+(?P<message>.+?)\s*$",
+    re.IGNORECASE,
+  ),
+  re.compile(
+    r"^\s*(?:please\s+)?send\s+message\s+to\s+(?P<receiver>.+?)\s+saying\s+(?P<message>.+?)\s*$",
+    re.IGNORECASE,
+  ),
+  re.compile(
+    r"^\s*(?:please\s+)?send\s+(?P<message>.+?)\s+to\s+(?P<receiver>.+?)\s+on\s+(?P<platform>whatsapp|telegram|signal|discord|instagram|messenger)\s*$",
+    re.IGNORECASE,
+  ),
+  re.compile(
+    r"^\s*(?:please\s+)?send\s+(?P<message>.+?)\s+to\s+(?P<receiver>.+?)\s*$",
+    re.IGNORECASE,
+  ),
+  re.compile(
+    r"^\s*(?:please\s+)?message\s+(?P<receiver>.+?)\s+saying\s+(?P<message>.+?)\s*$",
+    re.IGNORECASE,
+  ),
+]
+
+
+def _clean_value(value: str) -> str:
+  return value.strip().strip('"').strip("'").strip()
+
+
+def _build_direct_message_plan(goal: str) -> dict | None:
+  normalized = re.sub(r"\s+", " ", (goal or "")).strip()
+  if not normalized:
+    return None
+
+  for pattern in _DIRECT_MESSAGE_PATTERNS:
+    match = pattern.match(normalized)
+    if not match:
+      continue
+
+    receiver = _clean_value(match.group("receiver"))
+    message = _clean_value(match.group("message"))
+    platform = _clean_value(match.groupdict().get("platform") or "WhatsApp")
+
+    if receiver and message:
+      return {
+        "goal": goal,
+        "steps": [
+          {
+            "step": 1,
+            "tool": "send_message",
+            "description": f"Send a direct message to {receiver}",
+            "parameters": {
+              "receiver": receiver,
+              "message_text": message,
+              "platform": platform or "WhatsApp",
+            },
+            "critical": True,
+          }
+        ],
+      }
+
+  return None
+
+
+def _normalize_plan(plan: dict, goal: str) -> dict:
+  if not isinstance(plan, dict):
+    raise ValueError("Plan must be a dictionary")
+
+  steps = plan.get("steps")
+  if not isinstance(steps, list) or not steps:
+    raise ValueError("Invalid plan structure")
+
+  normalized_steps = []
+  for index, raw_step in enumerate(steps, start=1):
+    if not isinstance(raw_step, dict):
+      raise ValueError("Each step must be an object")
+
+    tool = str(raw_step.get("tool", "")).strip()
+    description = str(raw_step.get("description", "")).strip()
+    parameters = raw_step.get("parameters") or {}
+    if not isinstance(parameters, dict):
+      raise ValueError(f"Step {index} parameters must be an object")
+
+    normalized_step = dict(raw_step)
+    normalized_step["step"] = raw_step.get("step", index)
+    normalized_step["tool"] = tool
+    normalized_step["description"] = description or f"Step {index}"
+    normalized_step["parameters"] = dict(parameters)
+
+    if tool == "send_message":
+      receiver = _clean_value(str(normalized_step["parameters"].get("receiver", "")))
+      message_text = _clean_value(str(normalized_step["parameters"].get("message_text", "")))
+      platform = _clean_value(str(normalized_step["parameters"].get("platform", "WhatsApp"))) or "WhatsApp"
+
+      if not receiver or not message_text:
+        raise ValueError("send_message requires receiver and message_text")
+
+      normalized_step["parameters"]["receiver"] = receiver
+      normalized_step["parameters"]["message_text"] = message_text
+      normalized_step["parameters"]["platform"] = platform
+
+    normalized_steps.append(normalized_step)
+
+  plan["goal"] = plan.get("goal", goal)
+  plan["steps"] = normalized_steps
+  return plan
+
+
 def _get_api_key() -> str:
     with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
         return json.load(f)["gemini_api_key"]
 
 
 def create_plan(goal: str, context: str = "") -> dict:
+  direct_plan = _build_direct_message_plan(goal)
+  if direct_plan:
+    print("[Planner] ⚡ Direct message plan built locally")
+    return direct_plan
+
     import google.generativeai as genai
 
     genai.configure(api_key=_get_api_key())
@@ -189,10 +306,7 @@ def create_plan(goal: str, context: str = "") -> dict:
         text     = response.text.strip()
         text     = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
 
-        plan = json.loads(text)
-
-        if "steps" not in plan or not isinstance(plan["steps"], list):
-            raise ValueError("Invalid plan structure")
+        plan = _normalize_plan(json.loads(text), goal)
 
         for step in plan["steps"]:
             if step.get("tool") in ("generated_code",):
@@ -258,7 +372,7 @@ Create a REVISED plan for the remaining work only. Do not repeat completed steps
         response = model.generate_content(prompt)
         text     = response.text.strip()
         text     = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
-        plan     = json.loads(text)
+        plan     = _normalize_plan(json.loads(text), goal)
 
         for step in plan.get("steps", []):
             if step.get("tool") == "generated_code":
