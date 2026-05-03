@@ -4,20 +4,28 @@
 
 JARVISS is a personal AI assistant for Windows built to turn natural language and voice commands into real desktop actions.
 
-## Quick Demo
+## Advanced Capabilities
 
-Example command:
+JARVISS can handle a wide range of assistant tasks beyond messaging:
+
+- Open and control desktop applications
+- Launch browsers and perform web searches
+- Send messages on supported platforms
+- Check weather and create reminders
+- Process screen content and visual tasks
+- Search and play YouTube videos
+- Handle files, code, and helper workflows
+- Use memory and prompt-based assistant logic
+
+Example commands:
 
 ```text
-send message to chinni on whatsapp saying hiii
+open chrome
+search for python tutorials
+set a reminder for 7 pm
+what is the weather in london
+play a youtube video about machine learning
 ```
-
-What happens:
-
-- JARVISS opens WhatsApp Desktop
-- It searches the contact name
-- It opens the chat
-- It sends the message
 
 ## Screenshots
 
