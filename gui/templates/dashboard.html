@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis-MK37 Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="hud-bg"></div>
+    <div class="hud-glow hud-glow-left"></div>
+    <div class="hud-glow hud-glow-right"></div>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="brand-block">
+                    <h1 class="logo">🤖 Jarvis-MK37</h1>
+                    <p class="logo-subtitle">Neural Control Interface</p>
+                </div>
+                <div class="header-status">
+                    <span id="status-indicator" class="status-badge status-sleeping">Sleeping</span>
+                    <span id="status-time" class="status-time">--:--</span>
+                </div>
+            </div>
+        </header>
+
+        <section class="telemetry-strip" aria-label="System telemetry">
+            <div class="telemetry-chip">
+                <span class="telemetry-label">Core</span>
+                <span class="telemetry-value" id="telemetry-core">JARVIS LINKED</span>
+            </div>
+            <div class="telemetry-chip">
+                <span class="telemetry-label">Signal</span>
+                <span class="telemetry-value" id="telemetry-signal">STABLE</span>
+            </div>
+            <div class="telemetry-chip">
+                <span class="telemetry-label">Mode</span>
+                <span class="telemetry-value" id="telemetry-mode">ACTIVE</span>
+            </div>
+            <div class="telemetry-chip telemetry-chip-wide">
+                <span class="telemetry-label">Command Queue</span>
+                <span class="telemetry-value" id="telemetry-queue">0 PENDING</span>
+            </div>
+        </section>
+
+        <!-- Main Grid -->
+        <main class="dashboard-grid">
+            <!-- Left Panel: Status & Control -->
+            <aside class="sidebar">
+                <!-- Reactor Core -->
+                <div class="card reactor-card">
+                    <h3 class="card-title">Reactor Core</h3>
+                    <div class="reactor-shell" aria-label="Jarvis reactor core">
+                        <div class="reactor-ring reactor-ring-outer"></div>
+                        <div class="reactor-ring reactor-ring-middle"></div>
+                        <div class="reactor-ring reactor-ring-inner"></div>
+                        <div class="reactor-core" id="reactor-core">
+                            <div class="reactor-core-orb"></div>
+                            <div class="reactor-core-glint"></div>
+                            <div class="reactor-core-text">IDLE</div>
+                        </div>
+                    </div>
+                    <div class="reactor-meta">
+                        <span class="reactor-label">Status</span>
+                        <span class="reactor-value" id="reactor-status">Standby</span>
+                    </div>
+                    <div class="reactor-meter">
+                        <span class="reactor-meter-fill" id="reactor-meter-fill"></span>
+                    </div>
+                </div>
+
+                <!-- Signal Field -->
+                <div class="card signal-card">
+                    <h3 class="card-title">Signal Field</h3>
+                    <div class="signal-radar" aria-label="Live signal radar">
+                        <div class="signal-radar-grid"></div>
+                        <div class="signal-radar-sweep"></div>
+                        <div class="signal-radar-core"></div>
+                    </div>
+                    <div class="signal-wave" id="signal-wave">
+                        <span></span><span></span><span></span><span></span>
+                        <span></span><span></span><span></span><span></span>
+                        <span></span><span></span><span></span><span></span>
+                    </div>
+                    <div class="signal-meta">
+                        <span class="reactor-label">Waveform</span>
+                        <span class="reactor-value" id="signal-state">Quiet</span>
+                    </div>
+                </div>
+
+                <!-- Agent Status Card -->
+                <div class="card status-card">
+                    <h3 class="card-title">Agent Status</h3>
+                    <div class="status-grid">
+                        <div class="status-item">
+                            <label>State</label>
+                            <span id="agent-state" class="value">Sleeping</span>
+                        </div>
+                        <div class="status-item">
+                            <label>Listening</label>
+                            <span id="agent-listening" class="value">Off</span>
+                        </div>
+                        <div class="status-item">
+                            <label>Last Command</label>
+                            <span id="last-command" class="value ellipsis">None</span>
+                        </div>
+                        <div class="status-item">
+                            <label>Uptime</label>
+                            <span id="uptime" class="value">00:00:00</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Resources Card -->
+                <div class="card resources-card">
+                    <h3 class="card-title">System Resources</h3>
+                    <div class="resource-item">
+                        <label>CPU</label>
+                        <div class="progress-bar">
+                            <div id="cpu-usage" class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span id="cpu-percent" class="resource-label">0%</span>
+                    </div>
+                    <div class="resource-item">
+                        <label>Memory</label>
+                        <div class="progress-bar">
+                            <div id="memory-usage" class="progress-fill" style="width: 0%"></div>
+                        </div>
+                        <span id="memory-percent" class="resource-label">0%</span>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="card">
+                    <h3 class="card-title">Quick Actions</h3>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="sendCommand('open chrome')">
+                            🌐 Open Chrome
+                        </button>
+                        <button class="btn btn-primary" onclick="sendCommand('open code')">
+                            💻 Open Code
+                        </button>
+                        <button class="btn btn-secondary" onclick="toggleState()">
+                            😴 Toggle Sleep
+                        </button>
+                        <button class="btn btn-secondary" onclick="refreshData()">
+                            🔄 Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Manual Command Input -->
+                <div class="card">
+                    <h3 class="card-title">Manual Command</h3>
+                    <div class="command-input">
+                        <input 
+                            type="text" 
+                            id="command-input" 
+                            placeholder="Enter a voice command..."
+                            onkeypress="handleCommandKeypress(event)"
+                        >
+                        <button class="btn btn-primary" onclick="sendManualCommand()">
+                            Send
+                        </button>
+                    </div>
+                </div>
+            </aside>
+
+            <!-- Right Panel: Logs & History -->
+            <section class="main-content">
+                <div class="console-banner">
+                    <div class="console-banner-left">
+                        <span class="banner-kicker">IRON CONTROL LAYER</span>
+                        <h2>Neural Command Matrix</h2>
+                        <p>Live speech, system telemetry, and tool execution in a single tactical view.</p>
+                    </div>
+                    <div class="console-banner-right">
+                        <div class="banner-stat">
+                            <span>Pulse</span>
+                            <strong id="banner-pulse">--</strong>
+                        </div>
+                        <div class="banner-stat">
+                            <span>Protocol</span>
+                            <strong id="banner-protocol">Realtime</strong>
+                        </div>
+                        <div class="banner-stat">
+                            <span>Queue</span>
+                            <strong id="banner-queue">0</strong>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div class="tabs">
+                    <button class="tab-button active" onclick="switchTab('logs')">
+                        📋 Live Logs
+                    </button>
+                    <button class="tab-button" onclick="switchTab('history')">
+                        📜 Action History
+                    </button>
+                    <button class="tab-button" onclick="switchTab('settings')">
+                        ⚙️ Settings
+                    </button>
+                    <button class="tab-button" onclick="switchTab('analytics')">
+                        📊 Analytics
+                    </button>
+                </div>
+
+                <!-- Logs Tab -->
+                <div id="logs-tab" class="tab-content active">
+                    <div class="logs-container">
+                        <div class="logs-header">
+                            <h3>Live Activity Log</h3>
+                            <button class="btn btn-small" onclick="clearLogs()">Clear</button>
+                        </div>
+                        <div id="logs-list" class="logs-list">
+                            <div class="log-empty">No logs yet. Waiting for activity...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- History Tab -->
+                <div id="history-tab" class="tab-content">
+                    <div class="history-container">
+                        <h3>Recent Actions</h3>
+                        <table id="history-table" class="history-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Command</th>
+                                    <th>Tool</th>
+                                    <th>Status</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="history-body">
+                                <tr><td colspan="5" class="empty">No history yet</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Settings Tab -->
+                <div id="settings-tab" class="tab-content">
+                    <div class="settings-container">
+                        <h3>Configuration</h3>
+                        <div class="settings-form">
+                            <div class="form-group">
+                                <label>Wake Words (comma-separated)</label>
+                                <input type="text" id="wake-words" placeholder="jarvis, hey jarvis, ok jarvis">
+                            </div>
+                            <div class="form-group">
+                                <label>Sleep Words (comma-separated)</label>
+                                <input type="text" id="sleep-words" placeholder="go to sleep, sleep mode">
+                            </div>
+                            <div class="form-group">
+                                <label>Active Timeout (seconds)</label>
+                                <input type="number" id="timeout-seconds" min="5" max="300" value="30">
+                            </div>
+                            <div class="form-group">
+                                <label>Energy Threshold</label>
+                                <input type="number" id="energy-threshold" min="100" max="1000" value="300">
+                            </div>
+                            <div class="form-group">
+                                <label>VAD Aggressiveness (0-3)</label>
+                                <input type="number" id="vad-aggressiveness" min="0" max="3" value="1">
+                            </div>
+                            <div class="form-actions">
+                                <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+                                <button class="btn btn-secondary" onclick="loadSettings()">Reset</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Analytics Tab -->
+                <div id="analytics-tab" class="tab-content">
+                    <div class="analytics-container">
+                        <div class="analytics-header">
+                            <h3>Performance Analytics</h3>
+                            <div class="health-badge" id="health-score">
+                                <span>Health:</span>
+                                <strong id="health-percent">100%</strong>
+                            </div>
+                        </div>
+
+                        <!-- Insights -->
+                        <div class="insights-panel" id="insights-panel">
+                            <div class="insight-item insight-info">
+                                <span>Loading insights...</span>
+                            </div>
+                        </div>
+
+                        <!-- Charts Grid -->
+                        <div class="charts-grid">
+                            <!-- Success Rates Chart -->
+                            <div class="chart-card">
+                                <h4>Success Rates by Tool</h4>
+                                <div id="success-rates-chart" class="chart-placeholder">
+                                    <canvas id="success-rates-canvas"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Tool Usage Chart -->
+                            <div class="chart-card">
+                                <h4>Most Used Tools</h4>
+                                <div id="tool-usage-chart" class="chart-placeholder">
+                                    <canvas id="tool-usage-canvas"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Execution Times Chart -->
+                            <div class="chart-card">
+                                <h4>Execution Times (ms)</h4>
+                                <div id="execution-times-chart" class="chart-placeholder">
+                                    <canvas id="execution-times-canvas"></canvas>
+                                </div>
+                            </div>
+
+                            <!-- Failures Chart -->
+                            <div class="chart-card">
+                                <h4>Tool Failures</h4>
+                                <div id="failures-chart" class="chart-placeholder">
+                                    <canvas id="failures-canvas"></canvas>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Stats Table -->
+                        <div class="stats-table-container">
+                            <h4>Tool Statistics</h4>
+                            <table class="stats-table" id="stats-table">
+                                <thead>
+                                    <tr>
+                                        <th>Tool</th>
+                                        <th>Executions</th>
+                                        <th>Avg Time (ms)</th>
+                                        <th>p95 (ms)</th>
+                                        <th>Success Rate</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="stats-body">
+                                    <tr><td colspan="5" style="text-align: center;">Loading stats...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Emotion Detection Card -->
+                        <div class="emotion-card card">
+                            <h4>Emotion Detection</h4>
+                            <div class="emotion-controls">
+                                <button class="btn btn-primary" onclick="startEmotionDetection()">
+                                    📹 Start Recording
+                                </button>
+                                <button class="btn btn-secondary" onclick="stopEmotionDetection()">
+                                    ⏹️ Stop
+                                </button>
+                            </div>
+                            <div class="emotion-stats" id="emotion-stats">
+                                <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">
+                                    Emotion detection ready. Click Start to begin recording.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>Jarvis-MK37 Dashboard v0.2.0 | Last updated: <span id="footer-time">--:--:--</span></p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

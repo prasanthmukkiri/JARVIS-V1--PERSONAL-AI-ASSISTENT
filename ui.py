@@ -1,4 +1,4 @@
-import os, json, time, math, random, threading, platform
+import os, json, time, math, random, threading, platform, webbrowser
 import tkinter as tk
 from collections import deque
 from PIL import Image, ImageTk, ImageDraw
@@ -105,6 +105,7 @@ class JarvisUI:
         self._build_input_bar(LW, INPUT_Y)
 
         self._build_mute_button()
+        self._build_dashboard_button()
 
         self.root.bind("<F4>", lambda e: self._toggle_mute())
 
@@ -147,6 +148,32 @@ class JarvisUI:
         c.create_rectangle(0, 0, 110, 32, outline=border, fill=fill, width=1)
         c.create_text(55, 16, text=f"{icon}{label}",
                       fill=fg, font=("Courier", 10, "bold"))
+
+    def _open_dashboard(self):
+        try:
+            webbrowser.open("http://localhost:5555")
+            self.write_log("SYS: Opening dashboard in browser.")
+        except Exception as e:
+            self.write_log(f"ERR: Dashboard open failed — {e}")
+
+    def _build_dashboard_button(self):
+        BTN_W, BTN_H = 154, 32
+        BTN_X = self.W - BTN_W - 18
+        BTN_Y = self.H - 70
+
+        self._dashboard_canvas = tk.Canvas(
+            self.root, width=BTN_W, height=BTN_H,
+            bg=C_BG, highlightthickness=0, cursor="hand2"
+        )
+        self._dashboard_canvas.place(x=BTN_X, y=BTN_Y)
+        self._dashboard_canvas.bind("<Button-1>", lambda e: self._open_dashboard())
+        self._draw_dashboard_button()
+
+    def _draw_dashboard_button(self):
+        c = self._dashboard_canvas
+        c.delete("all")
+        c.create_rectangle(0, 0, 154, 32, outline=C_PRI, fill=C_PANEL, width=1)
+        c.create_text(77, 16, text="📊 DASHBOARD", fill=C_PRI, font=("Courier", 10, "bold"))
 
     def _toggle_mute(self):
         self.muted = not self.muted

@@ -386,6 +386,7 @@ def screen_process(
     response=None,
     player=None,
     session_memory=None,
+    speak=None,
 ) -> bool:
 
     params    = parameters or {}

@@ -1,0 +1,59 @@
+name: CI – Tests & Linting
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ "3.11", "3.12" ]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest pytest-cov pytest-asyncio
+
+    - name: Run linting (pylint)
+      run: |
+        pip install pylint
+        pylint actions/*.py agent/*.py --disable=C0111,C0103,R0913,R0914 --exit-zero || true
+      continue-on-error: true
+
+    - name: Run formatting check (black)
+      run: |
+        pip install black
+        black --check . || true
+      continue-on-error: true
+
+    - name: Run tests (pytest)
+      run: |
+        pytest tests/ -v --tb=short --cov=actions --cov=agent --cov-report=term
+
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage.xml
+        flags: unittests
+        fail_ci_if_error: false

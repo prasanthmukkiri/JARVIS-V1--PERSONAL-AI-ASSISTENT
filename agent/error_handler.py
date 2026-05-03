@@ -1,6 +1,7 @@
 import json
 import re
 import sys
+import time
 from pathlib import Path
 from enum import Enum
 
@@ -149,6 +150,9 @@ def generate_fix(step: dict, error: str, fix_suggestion: str) -> dict:
     Returns a modified step dict.
     """
     import google.generativeai as genai
+    from pathlib import Path
+    import tempfile
+    import os
 
     genai.configure(api_key=_get_api_key())
     model = genai.GenerativeModel(model_name="gemini-2.0-flash")
@@ -171,15 +175,34 @@ Return ONLY the Python code, no explanation."""
         code = response.text.strip()
         code = re.sub(r"```(?:python)?", "", code).strip().rstrip("`").strip()
 
+        # Write code to a temporary file so code_helper.run can execute it
+        temp_dir = Path(tempfile.gettempdir()) / "jarvis_fixes"
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        
+        temp_file = temp_dir / f"fix_{step.get('step', 'unknown')}_{int(time.time())}.py"
+        try:
+            temp_file.write_text(code, encoding="utf-8")
+            print(f"[ErrorHandler] 💾 Generated fix saved to: {temp_file}")
+        except Exception as write_err:
+            print(f"[ErrorHandler] ⚠️ Could not write fix to temp file: {write_err}")
+            # Fallback to generated_code tool
+            return {
+                "step":        step.get("step"),
+                "tool":        "generated_code",
+                "description": f"Auto-fix for: {step.get('description')}",
+                "parameters":  {"description": step.get("description", "")},
+                "depends_on":  step.get("depends_on", []),
+                "critical":    step.get("critical", False)
+            }
+
         return {
             "step":        step.get("step"),
             "tool":        "code_helper",
             "description": f"Auto-fix for: {step.get('description')}",
             "parameters": {
                 "action":      "run",
-                "description": fix_suggestion,
-                "code":        code,
-                "language":    "python"
+                "file_path":   str(temp_file),
+                "timeout":     60,
             },
             "depends_on": step.get("depends_on", []),
             "critical":   step.get("critical", False)

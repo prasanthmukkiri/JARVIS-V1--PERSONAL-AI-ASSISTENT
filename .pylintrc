@@ -1,0 +1,26 @@
+[MASTER]
+# Use a conservative set of checks; add more as needed
+max-line-length=120
+min-similarity-lines=6
+ignore-patterns=test_.*\.py,__init__\.py
+
+[MESSAGES CONTROL]
+disable=
+    C0111,  # Missing module docstring
+    C0103,  # Invalid name
+    C0302,  # Too many lines
+    R0913,  # Too many arguments
+    R0914,  # Too many local variables
+    R0902,  # Too many instance attributes
+    W0621,  # Redefining builtin
+    E1136,  # Unsubscriptable object (false positives with type hints)
+    R0904,  # Too many public methods
+
+[FORMAT]
+max-line-length=120
+indent-string='    '
+
+[DESIGN]
+max-locals=20
+max-branches=15
+max-statements=60

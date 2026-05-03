@@ -1,83 +1,91 @@
-# 🤖 MARK XXXVII (37)
-### The Ultimate Cross-Platform Personal AI Assistant — By FatihMakes
+# JARVISS / Jarvis-MK37
 
-> 📺 **[Watch the full setup video on YouTube](https://www.youtube.com/watch?v=BhOsnGC_sAA)**
+JARVISS is a personal AI assistant for Windows built to turn natural language and voice commands into real desktop actions.
 
-A real-time voice AI that can hear, see, understand, and control your computer — on any OS. Supporting Windows, macOS, and Linux. Local execution. Zero subscriptions. Engineered for total autonomy.
+## Quick Demo
 
----
+Example command:
 
-## ✨ Overview
+```text
+send message to chinni on whatsapp saying hiii
+```
 
-MARK XXXVII is the most versatile evolution of the Jarvis project. It transforms your operating system into a living, breathing intelligent entity. Through natural voice commands, Mark 37 analyzes your screen, manages your files, and executes complex workflows across different environments.
+What happens:
 
-It's not just an assistant — it's an extension of your digital life.
+- JARVISS opens WhatsApp Desktop
+- It searches the contact name
+- It opens the chat
+- It sends the message
 
----
+## Screenshots
 
-## 🚀 Capabilities
+These workflow snapshots were captured during development:
 
-### Core Features
-| Feature | Description |
-|---|---|
-| 🎙️ Real-time Voice | Ultra-low latency conversation in any language |
-| 🖥️ System Control | Launch apps, manage files, execute terminal commands |
-| 🧩 Autonomous Tasks | High-level planning for complex, multi-step goals |
-| 👁️ Visual Awareness | Real-time screen processing and webcam vision |
-| 🧠 Persistent Memory | Deeply remembers your projects, preferences, and personal context |
-| 🔒 Privacy First | Physical mute button (F4 / UI) and fully local control |
-| ⌨️ Keyboard & Voice | Switch seamlessly between typing and speaking |
+![Before typing](tools/send_debug/20260503T100913583280_before_paste.png)
 
----
+![After focusing the input](tools/send_debug/20260503T100914689841_after_click_input.png)
 
-## 🆕 What's New in XXXVII
+![After sending the message](tools/send_debug/20260503T100915930001_after_send.png)
 
-- 🐧🍎 **Cross-Platform Support** *(Experimental)* — Now runs on Windows, macOS, and Linux. Core features work across all platforms; some OS-specific tasks may vary during the testing phase.
-- 💤 **Graceful Shutdown** — Tell Jarvis to "Shut down" or "Close" and it exits the session properly.
-- 🧠 **Strengthened Memory** — Improved long-term retention and context recall; better understanding of relationships and history.
-- 🔧 **Action Core Optimizations** — Major bugs in action scripts fixed for smoother system execution.
-- ⚡ **Optimized Performance** — Faster response times and refined tool-calling logic.
+## Ownership
 
----
+This project is fully owned, authored, and created by FatihMakes.
 
-## ⚡ Quick Start
+No other personal authorship, ownership, or contributor credits are included in this README. If the project is reused, shared, or referenced elsewhere, FatihMakes should remain clearly credited as the sole owner and maker.
+
+## Features
+
+- Voice wake-word detection and assistant conversation flow
+- Desktop app launching and control
+- Browser automation and web search
+- Messaging support for supported platforms
+- Weather lookup and reminders
+- Screen processing and visual task support
+- YouTube video search and playback
+- Memory handling and prompt-based assistant logic
+- Helper tools for code, files, games, and device actions
+
+## Project Layout
+
+- `main.py` - application entry point
+- `ui.py` - assistant UI
+- `wake_word.py` - wake-word detector
+- `actions/` - task-specific automation modules
+- `agent/` - planning, execution, and error handling
+- `memory/` - local memory management
+- `config/` - configuration and API key files
+- `core/` - prompt and assistant core text
+- `models/` - bundled speech and AI model assets
+
+## Setup
+
+Install dependencies:
 
 ```bash
-git clone https://github.com/FatihMakes/Jarvis-MK37.git
-cd Jarvis-MK37
 pip install -r requirements.txt
-playwright install
+```
+
+Optional setup script:
+
+```bash
+python setup.py
+```
+
+## Run
+
+Start the assistant:
+
+```bash
 python main.py
 ```
 
-> ⚠️ **Installation Note:** Due to the new cross-platform integration, OS-specific libraries are not all bundled in `requirements.txt` to keep the install lightweight. If you encounter a `ModuleNotFoundError`, simply run `pip install <module_name>` for your specific system.
+## Notes
 
----
+- Designed primarily for Windows desktop automation.
+- Some features depend on installed apps, browser access, and valid API keys.
+- Logs are written to `jarvis_log.txt`.
+- Development snapshots used for debugging are stored under `tools/send_debug/`.
 
-## 📋 Requirements
+## License
 
-| Requirement | Details |
-|---|---|
-| **OS** | Windows 10/11, macOS, or Linux |
-| **Python** | 3.11 or 3.12 |
-| **Microphone** | Required for voice commands |
-| **API Key** | Free Gemini API key |
-
----
-
-## ⚠️ License
-
-Personal and non-commercial use only.
-Licensed under **[Creative Commons BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/)**.
-
----
-
-## 👤 Connect with the Creator
-
-Engineered by an 18-year-old developer building a real JARVIS-style assistant.
-⭐ **Star the repository to support the journey to Mark 85.**
-
-| Platform | Link |
-|---|---|
-| YouTube | [@FatihMakes](https://www.youtube.com/@FatihMakes) |
-| Instagram | [@fatihmakes](https://www.instagram.com/fatihmakes) |
+No license is declared yet. All rights are reserved by FatihMakes unless a separate license is added later.

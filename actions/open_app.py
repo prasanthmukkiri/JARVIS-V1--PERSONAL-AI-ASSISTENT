@@ -2,6 +2,14 @@ import time
 import subprocess
 import platform
 import shutil
+import os
+from pathlib import Path
+
+try:
+    import pygetwindow as gw
+    _PYGETWINDOW = True
+except ImportError:
+    _PYGETWINDOW = False
 
 try:
     import psutil
@@ -77,7 +85,207 @@ def _normalize(raw: str) -> str:
 
     return raw  
 
+
+def _chrome_user_data_dir() -> Path | None:
+    if _SYSTEM == "Windows":
+        local = os.environ.get("LOCALAPPDATA", "")
+        candidate = Path(local) / "Google" / "Chrome" / "User Data"
+        return candidate if candidate.exists() else None
+
+    if _SYSTEM == "Darwin":
+        candidate = Path.home() / "Library" / "Application Support" / "Google" / "Chrome"
+        return candidate if candidate.exists() else None
+
+    if _SYSTEM == "Linux":
+        for candidate in (
+            Path.home() / ".config" / "google-chrome",
+            Path.home() / ".config" / "chromium",
+        ):
+            if candidate.exists():
+                return candidate
+
+    return None
+
+
+def _chrome_profile_name() -> str:
+    user_data_dir = _chrome_user_data_dir()
+    if not user_data_dir:
+        return "Default"
+
+    profile_dirs = []
+    for child in user_data_dir.iterdir():
+        if not child.is_dir():
+            continue
+        name = child.name
+        if name == "Default":
+            return name
+        if name.lower().startswith("profile "):
+            try:
+                profile_dirs.append((int(name.split()[1]), name))
+            except Exception:
+                continue
+
+    if profile_dirs:
+        profile_dirs.sort(key=lambda item: item[0])
+        return profile_dirs[0][1]
+
+    return "Default"
+
+
+def _activate_existing_chrome_window() -> bool:
+    if _SYSTEM != "Windows" or not _PYGETWINDOW:
+        return False
+
+    try:
+        windows = [w for w in gw.getAllWindows() if w.title and "chrome" in w.title.lower()]
+        for window in windows:
+            try:
+                if window.isMinimized:
+                    window.restore()
+                window.activate()
+                time.sleep(0.3)
+                return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return False
+
+
+def _find_chrome_cdp_port() -> int | None:
+    """Try to detect a running Chrome process that was started with
+    --remote-debugging-port and return that port number.
+    """
+    if not _PSUTIL:
+        return None
+
+    try:
+        for proc in psutil.process_iter(attrs=("name", "cmdline")):
+            info = proc.info
+            name = (info.get("name") or "").lower()
+            if "chrome" not in name and "msedge" not in name and "brave" not in name:
+                continue
+            cmd = info.get("cmdline") or []
+            for part in cmd:
+                if "--remote-debugging-port" in str(part):
+                    if "=" in part:
+                        try:
+                            port = int(part.split("=")[-1])
+                            return port
+                        except Exception:
+                            continue
+            for i, part in enumerate(cmd):
+                if part == "--remote-debugging-port" and i + 1 < len(cmd):
+                    try:
+                        return int(cmd[i + 1])
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+
+    return None
+
+
+def _find_chrome_cdp_port() -> int | None:
+    """Try to detect a running Chrome process that was started with
+    --remote-debugging-port and return that port number.
+    """
+    if not _PSUTIL:
+        return None
+
+    try:
+        for proc in psutil.process_iter(attrs=("name", "cmdline")):
+            info = proc.info
+            name = (info.get("name") or "").lower()
+            if "chrome" not in name and "msedge" not in name and "brave" not in name:
+                continue
+            cmd = info.get("cmdline") or []
+            for part in cmd:
+                if "--remote-debugging-port" in str(part):
+                    if "=" in part:
+                        try:
+                            port = int(part.split("=")[-1])
+                            return port
+                        except Exception:
+                            continue
+            # handle separate arg value: --remote-debugging-port 9222
+            for i, part in enumerate(cmd):
+                if part == "--remote-debugging-port" and i + 1 < len(cmd):
+                    try:
+                        return int(cmd[i + 1])
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+
+    return None
+
+
+def _find_chrome_windows() -> str | None:
+    candidates = [
+        Path(os.environ.get("PROGRAMFILES", "")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+        Path(os.environ.get("PROGRAMFILES(X86)", "")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "Google" / "Chrome" / "Application" / "chrome.exe",
+    ]
+
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+
+    try:
+        import winreg
+
+        keys = [
+            r"SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\chrome.exe",
+            r"SOFTWARE\Clients\StartMenuInternet\ChromeHTML\shell\open\command",
+        ]
+        for key_path in keys:
+            for hive in (winreg.HKEY_LOCAL_MACHINE, winreg.HKEY_CURRENT_USER):
+                try:
+                    key = winreg.OpenKey(hive, key_path)
+                    value = winreg.QueryValue(key, None)
+                    winreg.CloseKey(key)
+                    exe = value.strip().strip('"').split('"')[0].split(" --")[0].strip()
+                    if exe and Path(exe).exists():
+                        return exe
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    for candidate in (shutil.which("chrome"), shutil.which("chrome.exe")):
+        if candidate:
+            return candidate
+
+    return None
+
+
+def _launch_chrome_windows() -> bool:
+    chrome_exe = _find_chrome_windows()
+    if not chrome_exe:
+        return False
+
+    profile = _chrome_profile_name()
+
+    try:
+        subprocess.Popen(
+            [chrome_exe, f"--profile-directory={profile}", "--new-tab", "about:blank"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(1.2)
+        return True
+    except Exception as e:
+        print(f"[open_app] Chrome launch failed: {e}")
+        return False
+
 def _launch_windows(app_name: str) -> bool:
+
+    if app_name.lower() in {"chrome", "google chrome"}:
+        if _activate_existing_chrome_window():
+            return True
+        return _launch_chrome_windows()
 
     if shutil.which(app_name) or shutil.which(app_name.split(".")[0]):
         try:
@@ -243,6 +451,12 @@ def open_app(
         player.write_log(f"[open_app] {app_name}")
 
     try:
+        if _SYSTEM == "Windows" and normalized.lower() in {"chrome", "google chrome"}:
+            if _activate_existing_chrome_window():
+                return f"Opened {app_name}."
+            if _launch_chrome_windows():
+                return f"Opened {app_name}."
+
         if launcher(normalized):
             return f"Opened {app_name}."
         if normalized.lower() != app_name.lower():

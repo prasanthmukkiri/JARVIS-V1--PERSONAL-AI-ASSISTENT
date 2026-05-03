@@ -61,10 +61,10 @@ def _trim_to_limit(memory: dict) -> dict:
     entries = _all_entries(memory)
     entries.sort(key=lambda t: t[2].get("updated", "0000-00-00"))
     for cat, key, _ in entries:
-        if len(json.dumps(memory, ensure_ascii=False)) <= MEMORY_MAX_CHARS:
-            break
         del memory[cat][key]
         print(f"[Memory] 🗑️  Trimmed {cat}/{key}")
+        if len(json.dumps(memory, ensure_ascii=False)) <= MEMORY_MAX_CHARS:
+            break
     return memory
 
 def save_memory(memory: dict) -> None:

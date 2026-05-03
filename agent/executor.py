@@ -289,69 +289,73 @@ class AgentExecutor:
 
                 print(f"\n[Executor] ▶️ Step {step_num}: [{tool}] {desc}")
 
-                attempt = 1
                 step_ok = False
+                try:
+                    from agent.enhanced_recovery import get_recovery_manager
+                    rm = get_recovery_manager()
+                    success_rec, result, rec_err = rm.execute_with_retry(
+                        tool, _call_tool, tool, params, speak
+                    )
 
-                while attempt <= 3:
-                    if cancel_flag and cancel_flag.is_set():
-                        break
-                    try:
-                        result = _call_tool(tool, params, speak)
-                        step_results[step_num] = result 
+                    if success_rec:
+                        step_results[step_num] = result
                         completed_steps.append(step)
                         print(f"[Executor] ✅ Step {step_num} done: {str(result)[:100]}")
                         step_ok = True
-                        break
+                    else:
+                        # escalate to standard analyzer flow below by raising
+                        raise rec_err or RuntimeError("Recovery manager failed")
 
-                    except Exception as e:
-                        error_msg = str(e)
-                        print(f"[Executor] ❌ Step {step_num} attempt {attempt} failed: {error_msg}")
+                except Exception as e:
+                    error_msg = str(e)
+                    print(f"[Executor] ❌ Step {step_num} failed (recovery): {error_msg}")
 
-                        recovery = analyze_error(step, error_msg, attempt=attempt)
-                        decision = recovery["decision"]
-                        user_msg = recovery.get("user_message", "")
+                    recovery = analyze_error(step, error_msg, attempt=1)
+                    decision = recovery["decision"]
+                    user_msg = recovery.get("user_message", "")
 
-                        if speak and user_msg:
-                            speak(user_msg)
+                    if speak and user_msg:
+                        speak(user_msg)
 
-                        if decision == ErrorDecision.RETRY:
-                            attempt += 1
-                            import time; time.sleep(2)
-                            continue
+                    if decision == ErrorDecision.RETRY:
+                        # Let enhanced recovery manager handle retries; requeue for replan
+                        print(f"[Executor] ↩️ Recovery requested retry for step {step_num}")
+                        # mark as failed to trigger replan
+                        failed_step = step
+                        failed_error = error_msg
+                        success = False
 
-                        elif decision == ErrorDecision.SKIP:
-                            print(f"[Executor] ⏭️ Skipping step {step_num}")
-                            completed_steps.append(step)
-                            step_ok = True
-                            break
+                    elif decision == ErrorDecision.SKIP:
+                        print(f"[Executor] ⏭️ Skipping step {step_num}")
+                        completed_steps.append(step)
+                        step_ok = True
 
-                        elif decision == ErrorDecision.ABORT:
-                            msg = f"Task aborted, sir. {recovery.get('reason', '')}"
-                            if speak: speak(msg)
-                            return msg
+                    elif decision == ErrorDecision.ABORT:
+                        msg = f"Task aborted, sir. {recovery.get('reason', '')}"
+                        if speak: speak(msg)
+                        return msg
 
-                        else: 
-                            fix_suggestion = recovery.get("fix_suggestion", "")
-                            if fix_suggestion and tool != "generated_code":
-                                try:
-                                    fixed_step = generate_fix(step, error_msg, fix_suggestion)
-                                    if speak: speak("Trying an alternative approach, sir.")
-                                    res = _call_tool(
-                                        fixed_step["tool"],
-                                        fixed_step["parameters"],
-                                        speak
-                                    )
-                                    step_results[step_num] = res
-                                    completed_steps.append(step)
-                                    step_ok = True
-                                    break
-                                except Exception as fix_err:
-                                    print(f"[Executor] ⚠️ Fix failed: {fix_err}")
+                    else:
+                        fix_suggestion = recovery.get("fix_suggestion", "")
+                        if fix_suggestion and tool != "generated_code":
+                            try:
+                                fixed_step = generate_fix(step, error_msg, fix_suggestion)
+                                if speak: speak("Trying an alternative approach, sir.")
+                                res = _call_tool(
+                                    fixed_step["tool"],
+                                    fixed_step["parameters"],
+                                    speak
+                                )
+                                step_results[step_num] = res
+                                completed_steps.append(step)
+                                step_ok = True
+                            except Exception as fix_err:
+                                print(f"[Executor] ⚠️ Fix failed: {fix_err}")
 
-                            failed_step  = step
+                        if not step_ok and not failed_step:
+                            failed_step = step
                             failed_error = error_msg
-                            success      = False
-                            break
+                            success = False
 
                 if not step_ok and not failed_step:
                     failed_step  = step

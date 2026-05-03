@@ -20,6 +20,7 @@ import platform
 import shutil
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -30,6 +31,20 @@ from playwright.async_api import (
     Playwright,
     TimeoutError as PlaywrightTimeout,
 )
+
+try:
+    import pyautogui
+    pyautogui.FAILSAFE = True
+    pyautogui.PAUSE    = 0.05
+    _PYAUTOGUI = True
+except ImportError:
+    _PYAUTOGUI = False
+
+try:
+    import pygetwindow as gw
+    _PYGETWINDOW = True
+except ImportError:
+    _PYGETWINDOW = False
 
 # ── Platform ──────────────────────────────────────────────────────────────────
 _OS = platform.system()   # "Windows" | "Darwin" | "Linux"
@@ -128,6 +143,107 @@ def _real_profile_dir(browser: str) -> str:
     fallback.mkdir(parents=True, exist_ok=True)
     print(f"[Browser] ⚠️  Real profile not found for {browser}, using: {fallback}")
     return str(fallback)
+
+
+def _chrome_profile_name() -> str:
+    user_data_dir = Path(_real_profile_dir("chrome"))
+    if not user_data_dir.exists():
+        return "Default"
+
+    profile_pairs: list[tuple[int, str]] = []
+    for child in user_data_dir.iterdir():
+        if not child.is_dir():
+            continue
+        name = child.name
+        if name == "Default":
+            return name
+        if name.lower().startswith("profile "):
+            try:
+                profile_pairs.append((int(name.split()[1]), name))
+            except Exception:
+                continue
+
+    if profile_pairs:
+        profile_pairs.sort(key=lambda item: item[0])
+        return profile_pairs[0][1]
+
+    return "Default"
+
+
+def _require_pyautogui():
+    if not _PYAUTOGUI:
+        raise RuntimeError("PyAutoGUI not installed. Run: pip install pyautogui")
+
+
+def _activate_existing_chrome_window() -> bool:
+    if _OS != "Windows" or not _PYGETWINDOW:
+        return False
+
+    try:
+        windows = [w for w in gw.getAllWindows() if w.title and "chrome" in w.title.lower()]
+        for window in windows:
+            try:
+                if window.isMinimized:
+                    window.restore()
+                window.activate()
+                time.sleep(0.3)
+                return True
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return False
+
+
+def _find_chrome_cdp_port() -> int | None:
+    """Scan running processes for a Chrome-like process started with
+    --remote-debugging-port and return the port if found.
+    """
+    if not _PSUTIL:
+        return None
+    try:
+        for proc in psutil.process_iter(attrs=("name", "cmdline")):
+            info = proc.info
+            name = (info.get("name") or "").lower()
+            if "chrome" not in name and "msedge" not in name and "brave" not in name:
+                continue
+            cmd = info.get("cmdline") or []
+            for part in cmd:
+                if "--remote-debugging-port" in str(part):
+                    if "=" in part:
+                        try:
+                            return int(part.split("=")[-1])
+                        except Exception:
+                            continue
+            for i, part in enumerate(cmd):
+                if part == "--remote-debugging-port" and i + 1 < len(cmd):
+                    try:
+                        return int(cmd[i + 1])
+                    except Exception:
+                        continue
+    except Exception:
+        pass
+    return None
+
+
+def _native_chrome_open(target: str, search: bool = False) -> str:
+    _require_pyautogui()
+
+    if not _activate_existing_chrome_window():
+        cdp_port = _find_chrome_cdp_port()
+        msg = f"No existing Chrome window found. (CDP port: {cdp_port})" if cdp_port else "No existing Chrome window found."
+        return msg
+
+    time.sleep(0.2)
+    pyautogui.hotkey("ctrl", "l")
+    time.sleep(0.1)
+    pyautogui.write(target, interval=0.02)
+    time.sleep(0.1)
+    pyautogui.press("enter")
+
+    action = "Search" if search else "Opened"
+    return f"{action} in existing Chrome window: {target}"
 
 
 # ── Firefox gerçek profil dizini ──────────────────────────────────────────────
@@ -334,39 +450,6 @@ def _resolve_browser(name: str) -> dict | None:
 
 
 def _detect_default_browser() -> str:
-    try:
-        if _OS == "Windows":
-            import winreg
-            k = winreg.OpenKey(
-                winreg.HKEY_CURRENT_USER,
-                r"Software\Microsoft\Windows\Shell\Associations"
-                r"\UrlAssociations\http\UserChoice",
-            )
-            prog_id = winreg.QueryValueEx(k, "ProgId")[0].lower()
-            winreg.CloseKey(k)
-            for kw in ("edge", "firefox", "opera", "brave", "vivaldi", "chrome"):
-                if kw in prog_id:
-                    return kw
-        elif _OS == "Darwin":
-            out = subprocess.run(
-                ["defaults", "read",
-                 "com.apple.LaunchServices/com.apple.launchservices.secure",
-                 "LSHandlers"],
-                capture_output=True, text=True, timeout=5,
-            ).stdout.lower()
-            for kw in ("firefox", "opera", "brave", "vivaldi", "safari", "chrome", "edge"):
-                if kw in out:
-                    return kw
-        elif _OS == "Linux":
-            out = subprocess.run(
-                ["xdg-settings", "get", "default-web-browser"],
-                capture_output=True, text=True, timeout=5,
-            ).stdout.lower()
-            for kw in ("firefox", "opera", "brave", "vivaldi", "chrome", "edge"):
-                if kw in out:
-                    return kw
-    except Exception:
-        pass
     return "chrome"
 
 
@@ -478,9 +561,8 @@ class _BrowserSession:
                 self._context = await engine_obj.launch_persistent_context(jarvis, **kwargs)
 
             await asyncio.sleep(0.5)  # let the browser settle
-            # Always open a dedicated JARVIS tab instead of grabbing pages[0],
-            # which may already be about:blank or a stale restored tab.
-            self._page = await self._context.new_page()
+            pages = [p for p in self._context.pages if not p.is_closed()]
+            self._page = pages[0] if pages else await self._context.new_page()
             print(f"[Browser] ✅ Firefox launched")
             return
 
@@ -496,7 +578,8 @@ class _BrowserSession:
             }
             self._context = await engine_obj.launch_persistent_context(safari_profile, **kwargs)
             await asyncio.sleep(0.5)
-            self._page = await self._context.new_page()
+            pages = [p for p in self._context.pages if not p.is_closed()]
+            self._page = pages[0] if pages else await self._context.new_page()
             print(f"[Browser] ✅ Safari launched")
             return
 
@@ -517,6 +600,9 @@ class _BrowserSession:
             ],
         }
 
+        if self.browser_name == "chrome":
+            kwargs["args"].append(f"--profile-directory={_chrome_profile_name()}")
+
         if exe:
             kwargs["executable_path"] = exe
         elif channel:
@@ -532,7 +618,8 @@ class _BrowserSession:
         try:
             self._context = await engine_obj.launch_persistent_context(profile, **kwargs)
             await asyncio.sleep(0.5)  # let the browser settle before any navigation
-            self._page = await self._context.new_page()
+            pages = [p for p in self._context.pages if not p.is_closed()]
+            self._page = pages[0] if pages else await self._context.new_page()
             print(f"[Browser] ✅ Launched [{label}] profile={profile}")
             return
         except Exception as e:
@@ -546,7 +633,8 @@ class _BrowserSession:
         try:
             self._context = await engine_obj.launch_persistent_context(jarvis_profile, **kwargs)
             await asyncio.sleep(0.5)
-            self._page = await self._context.new_page()
+            pages = [p for p in self._context.pages if not p.is_closed()]
+            self._page = pages[0] if pages else await self._context.new_page()
             print(f"[Browser] ✅ Launched [{label}] with JARVIS profile")
         except Exception as e2:
             raise RuntimeError(f"Could not launch {self.browser_name}: {e2}") from e2
@@ -879,6 +967,28 @@ def browser_control(
     action  = params.get("action", "").lower().strip()
     browser = params.get("browser", "").lower().strip() or None
     result  = "Unknown action."
+
+    if _OS == "Windows" and (browser in (None, "", "chrome", "google chrome")):
+        if action == "search":
+            query = params.get("query", "").strip()
+            if query:
+                try:
+                    print(f"[Browser] Attempting native Chrome search for: {query[:50]}")
+                    result = _native_chrome_open(query, search=True)
+                    _log(player, result)
+                    return result
+                except Exception as e:
+                    print(f"[Browser] Native Chrome search failed: {e}")
+        elif action == "go_to":
+            url = params.get("url", "").strip()
+            if url:
+                try:
+                    print(f"[Browser] Attempting native Chrome navigation to: {url[:50]}")
+                    result = _native_chrome_open(_normalize_url(url), search=False)
+                    _log(player, result)
+                    return result
+                except Exception as e:
+                    print(f"[Browser] Native Chrome navigation failed: {e}")
 
     if action == "switch":
         target = browser or params.get("target", "").lower().strip()

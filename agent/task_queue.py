@@ -15,6 +15,7 @@ class TaskStatus(Enum):
 
 
 class TaskPriority(Enum):
+    CRITICAL = 0
     LOW    = 3
     NORMAL = 2
     HIGH   = 1   

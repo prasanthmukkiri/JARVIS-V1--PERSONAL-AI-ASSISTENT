@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+jarvis_log.txt
+.venv/
+.vscode/
+tools/send_debug/
+config/api_keys.json
+memory/long_term.json
