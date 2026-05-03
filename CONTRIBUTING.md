@@ -4,7 +4,7 @@
 
 ```bash
 # Clone and setup
-git clone https://github.com/FatihMakes/Jarvis-MK37.git
+git clone https://github.com/prasanthmukkiri/JARVIS--PERSONAL-AI-ASSISTENT.git
 cd Jarvis-MK37
 
 # Create virtual environment

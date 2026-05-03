@@ -1,6 +1,6 @@
 # JARVISS / Jarvis-MK37
 
-**Official repository of JARVISS, created and owned by FatihMakes.**
+**Official repository of JARVISS, created and owned by Prasanth Mukkiri.**
 
 JARVISS is a personal AI assistant for Windows built to turn natural language and voice commands into real desktop actions.
 
@@ -31,11 +31,11 @@ These workflow snapshots were captured during development:
 
 ## Ownership
 
-This project is fully owned, authored, and created by FatihMakes.
+This project is fully owned, authored, and created by Prasanth Mukkiri.
 
-FatihMakes is the sole maker, sole owner, and original author of this project. No other personal authorship, ownership, or contributor credits are included in this README.
+Prasanth Mukkiri is the sole maker, sole owner, and original author of this project. No other personal authorship, ownership, or contributor credits are included in this README.
 
-If the project is reused, shared, or referenced elsewhere, FatihMakes must remain clearly credited as the official owner and maker.
+If the project is reused, shared, or referenced elsewhere, Prasanth Mukkiri must remain clearly credited as the official owner and maker.
 
 ## Features
 
@@ -92,9 +92,8 @@ python main.py
 
 ## Official Status
 
-This repository is the official JARVISS project maintained by PrasanthMukki
-ri.
+This repository is the official JARVISS project maintained by Prasanth Mukkiri.
 
 ## License
 
-No license is declared yet. All rights are reserved to Prasanth Mukkiri  unless a separate license is added later.
+No license is declared yet. All rights are reserved by Prasanth Mukkiri unless a separate license is added later.
