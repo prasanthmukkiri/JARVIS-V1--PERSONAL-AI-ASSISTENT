@@ -92,8 +92,9 @@ python main.py
 
 ## Official Status
 
-This repository is the official JARVISS project maintained by FatihMakes.
+This repository is the official JARVISS project maintained by PrasanthMukki
+ri.
 
 ## License
 
-No license is declared yet. All rights are reserved by FatihMakes unless a separate license is added later.
+No license is declared yet. All rights are reserved to Prasanth Mukkiri  unless a separate license is added later.
