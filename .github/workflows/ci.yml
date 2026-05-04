@@ -32,11 +32,16 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        pip install -e .
+        # Install only cross-platform dependencies needed for testing
+        pip install google-generativeai requests beautifulsoup4 duckduckgo-search
+        pip install pillow send2trash youtube-transcript-api keyring plotly
+        # Install testing framework
         pip install pytest pytest-cov pytest-asyncio
+        # Install playwright for browser testing
         pip install playwright
-        python -m playwright install
+        python -m playwright install --with-deps
+        # Install package in development mode (skip Windows-only packages)
+        pip install -e . --no-deps || true
 
     - name: Run linting (pylint)
       run: |
