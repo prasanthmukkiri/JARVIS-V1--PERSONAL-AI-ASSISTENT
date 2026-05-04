@@ -217,8 +217,14 @@ def _build_direct_message_plan(goal: str) -> dict | None:
     if not match:
       continue
 
-    receiver = _clean_value(match.group("receiver"))
-    message = _clean_value(match.group("message"))
+    # Skip patterns that don't capture both receiver and message
+    try:
+      receiver = _clean_value(match.group("receiver"))
+      message = _clean_value(match.group("message"))
+    except IndexError:
+      # Pattern matched but doesn't have required groups
+      continue
+
     platform = _clean_value(match.groupdict().get("platform") or "WhatsApp")
 
     if receiver and message:

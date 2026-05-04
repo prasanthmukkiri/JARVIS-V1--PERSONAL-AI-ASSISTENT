@@ -79,7 +79,7 @@ class TestMultiStepPlanning:
 class TestMultiStepExecution:
     """Test executor's ability to chain multi-step plans."""
     
-    @patch('agent.executor.AgentExecutor._call_tool')
+    @patch('agent.executor._call_tool')
     def test_executor_executes_all_steps(self, mock_call_tool, multi_step_plan):
         """Test that executor executes all steps in a plan."""
         mock_call_tool.return_value = {"result": "Step completed"}
@@ -95,7 +95,7 @@ class TestMultiStepExecution:
             pass
     
     
-    @patch('agent.executor.AgentExecutor._call_tool')
+    @patch('agent.executor._call_tool')
     def test_executor_passes_context_between_steps(self, mock_call_tool):
         """Test that results from one step are available to the next step."""
         # Mock different responses for different tools

@@ -43,6 +43,35 @@ if 'google.generativeai' not in sys.modules:
 import pytest
 from pathlib import Path
 from unittest.mock import Mock, MagicMock, patch
+import json
+import tempfile
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_api_keys_for_tests():
+    """Create a temporary api_keys.json in config/ for testing.
+    
+    This fixture ensures tests that need API keys (like error_handler tests)
+    can run in CI environments where config/api_keys.json doesn't exist.
+    """
+    config_dir = Path(__file__).parent.parent / "config"
+    api_keys_file = config_dir / "api_keys.json"
+    
+    # Only create if it doesn't exist
+    if not api_keys_file.exists():
+        config_dir.mkdir(parents=True, exist_ok=True)
+        test_api_keys = {
+            "gemini_api_key": "test-key-for-ci",
+            "openweather_api_key": "test-weather-key",
+            "google_search_api_key": "test-search-key"
+        }
+        with open(api_keys_file, "w", encoding="utf-8") as f:
+            json.dump(test_api_keys, f)
+    
+    yield
+    
+    # Note: We don't delete the file after tests so it persists if re-using env
+    # This is safe since it contains only test credentials
 
 
 @pytest.fixture
