@@ -20,14 +20,21 @@ from __future__ import annotations
 import json
 import logging
 import os
+import html
+import re
+import concurrent.futures
 import threading
 import time
+import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
 
+import requests
 from flask import Flask, render_template, jsonify, request
 from flask_cors import CORS
+
+from actions.browser_control import browser_control
 
 try:
     import psutil
@@ -41,6 +48,12 @@ _BASE_DIR = Path(__file__).resolve().parent.parent
 _GUI_DIR = Path(__file__).resolve().parent
 _CONFIG_PATH = _BASE_DIR / "config" / "api_keys.json"
 _LOG_FILE = _BASE_DIR / "jarvis_log.txt"
+
+_NEWS_FEEDS = {
+    "india": "https://news.google.com/rss/search?q=India+when:2d&hl=en-IN&gl=IN&ceid=IN:en",
+    "south_india": "https://news.google.com/rss/search?q=South+India+when:2d&hl=en-IN&gl=IN&ceid=IN:en",
+    "international": "https://news.google.com/rss/search?q=world+when:2d&hl=en-IN&gl=IN&ceid=IN:en",
+}
 
 # Shared log queue (injected from main.py)
 _log_queue: Queue = Queue(maxsize=1000)
@@ -70,6 +83,81 @@ logger = logging.getLogger(__name__)
 def index():
     """Serve the main dashboard HTML."""
     return render_template("dashboard.html")
+
+
+@app.route("/news")
+def news_dashboard():
+    """Serve the dedicated news dashboard."""
+    return render_template("news.html")
+
+
+def _parse_news_feed(feed_url: str, limit: int = 5) -> list[dict]:
+    """Fetch and parse a Google News RSS feed."""
+    response = requests.get(feed_url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})
+    response.raise_for_status()
+
+    root = ET.fromstring(response.text)
+    articles: list[dict] = []
+
+    for item in root.findall(".//item")[:limit]:
+        title = html.unescape((item.findtext("title") or "").strip())
+        description = html.unescape((item.findtext("description") or "").strip())
+        link = (item.findtext("link") or "").strip()
+        pub_date = (item.findtext("pubDate") or "").strip()
+        source_element = item.find("source")
+        source = html.unescape((source_element.text or "").strip()) if source_element is not None else "Google News"
+
+        articles.append({
+            "title": title,
+            "description": re.sub(r"<[^>]+>", "", description),
+            "link": link,
+            "source": source,
+            "pubDate": pub_date,
+        })
+
+    return articles
+
+
+def _safe_parse_news_feed(feed_name: str, feed_url: str) -> list[dict]:
+    """Parse one news feed and fail closed to an empty list."""
+    try:
+        return _parse_news_feed(feed_url)
+    except Exception as e:
+        logger.warning(f"News feed failed for {feed_name}: {e}")
+        return []
+
+
+@app.route("/api/news", methods=["GET"])
+def get_news():
+    """Get current trending news for India, South India, and international."""
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                name: executor.submit(_safe_parse_news_feed, name, url)
+                for name, url in _NEWS_FEEDS.items()
+            }
+
+            india = futures["india"].result()
+            south_india = futures["south_india"].result()
+            international = futures["international"].result()
+
+        return jsonify({
+            "success": True,
+            "india": india,
+            "south_india": south_india,
+            "international": international,
+            "timestamp": datetime.now().isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"Error getting news: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "india": [],
+            "south_india": [],
+            "international": [],
+            "timestamp": datetime.now().isoformat(),
+        }), 500
 
 
 @app.route("/api/status", methods=["GET"])
@@ -215,6 +303,17 @@ def send_command():
         if not command:
             return jsonify({"success": False, "error": "No command provided"}), 400
         
+        if re.search(r"\b(current\s+news|latest\s+news|today'?s\s+news|news)\b", command, re.IGNORECASE):
+            result = browser_control(
+                parameters={"action": "go_to", "url": "http://127.0.0.1:5555/news", "browser": "chrome"},
+                player=None,
+            )
+            logger.info(f"[Dashboard] News command: {command} -> {result}")
+            return jsonify({
+                "success": True,
+                "message": "Opened news dashboard",
+            })
+
         # TODO: Inject command into executor
         logger.info(f"[Dashboard] Manual command: {command}")
         

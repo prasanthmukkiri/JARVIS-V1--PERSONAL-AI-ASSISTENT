@@ -51,6 +51,9 @@ from actions.computer_control  import computer_control
 from actions.game_updater      import game_updater
 
 
+NEWS_DASHBOARD_URL = "http://127.0.0.1:5555/news"
+
+
 def get_base_dir():
     if getattr(sys, "frozen", False):
         return Path(sys.executable).parent
@@ -117,6 +120,23 @@ def _parse_direct_message_command(text: str) -> dict | None:
             }
 
     return None
+
+
+def _is_news_request(text: str) -> bool:
+    normalized = re.sub(r"\s+", " ", (text or "")).strip().lower()
+    if not normalized:
+        return False
+    return bool(re.search(r"\b(current\s+news|latest\s+news|today'?s\s+news|news)\b", normalized))
+
+
+def _open_news_dashboard(player: JarvisUI, loop: asyncio.AbstractEventLoop):
+    return loop.run_in_executor(
+        None,
+        lambda: browser_control(
+            parameters={"action": "go_to", "url": NEWS_DASHBOARD_URL, "browser": "chrome"},
+            player=player,
+        ),
+    )
 
 
 def _get_api_key() -> str:
@@ -336,6 +356,15 @@ TOOL_DECLARATIONS = [
                 "clear_first": {"type": "BOOLEAN", "description": "Clear field before typing (default: true)"},
             },
             "required": ["action"]
+        }
+    },
+    {
+        "name": "news_dashboard",
+        "description": "Opens the Jarvis news dashboard with India, South India, and international headlines from the last 2 days.",
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {},
+            "required": []
         }
     },
     {
@@ -583,6 +612,16 @@ class JarvisLive:
         if not self._loop:
             return
 
+        if _is_news_request(text):
+            async def _run_news_dashboard() -> None:
+                result = await _open_news_dashboard(self.ui, self._loop)
+                logger.info(f"NEWS_DASHBOARD: {result}")
+                if self._add_log:
+                    self._add_log(f"[NEWS] {result}", "INFO")
+
+            asyncio.run_coroutine_threadsafe(_run_news_dashboard(), self._loop)
+            return
+
         direct_message = _parse_direct_message_command(text)
         if direct_message:
             async def _run_direct_message() -> None:
@@ -783,6 +822,10 @@ class JarvisLive:
             elif name == "browser_control":
                 r = await loop.run_in_executor(None, lambda: browser_control(parameters=args, player=self.ui))
                 result = r or "Done."
+
+            elif name == "news_dashboard":
+                r = await _open_news_dashboard(self.ui, loop)
+                result = r or "Opened news dashboard."
 
             elif name == "file_controller":
                 r = await loop.run_in_executor(None, lambda: file_controller(parameters=args, player=self.ui))
