@@ -1,107 +1,241 @@
-# JARVISS / Jarvis-MK37
+# JARVISS — Personal AI Assistant for Windows
 
-**Official repository of JARVISS, created and owned by Prasanth Mukkiri.**
+**Official repository created and owned by Prasanth Mukkiri.**
 
-JARVISS is a personal AI assistant for Windows built to turn natural language and voice commands into real desktop actions.
+JARVISS is a sophisticated personal AI assistant that turns natural language voice commands into automated desktop actions. Combining speech recognition, LLM-based planning, and multi-platform automation, JARVISS can control your computer, search the web, send messages, manage files, and more—all through simple spoken commands.
 
-## Advanced Capabilities
+![Version](https://img.shields.io/badge/version-MK37-blue)
+![Platform](https://img.shields.io/badge/platform-Windows-important)
+![Python](https://img.shields.io/badge/python-3.11%2B-brightgreen)
+![License](https://img.shields.io/badge/license-Proprietary-red)
 
-JARVISS can handle a wide range of assistant tasks beyond messaging:
+---
 
-- Open and control desktop applications
-- Launch browsers and perform web searches
-- Send messages on supported platforms
-- Check weather and create reminders
-- Process screen content and visual tasks
-- Search and play YouTube videos
-- Handle files, code, and helper workflows
-- Use memory and prompt-based assistant logic
+## 🚀 Key Features
 
-Example commands:
+### Voice & Speech Recognition
+- **Wake-word detection** — responds to custom wake words (e.g., "Jarvis").
+- **Vosk ASR** — local, privacy-first speech-to-text using offline models.
+- **Natural language understanding** — understands complex requests and converts them to actionable tasks.
 
-```text
-open chrome
-search for python tutorials
-set a reminder for 7 pm
-what is the weather in london
-play a youtube video about machine learning
+### Desktop Automation
+- **App launching** — open any installed Windows application.
+- **Window control** — focus, minimize, maximize windows; send keystrokes.
+- **File operations** — navigate, search, and manipulate files and folders.
+- **Browser automation** — open links, perform web searches, visit websites.
+
+### Communication & Messaging
+- **WhatsApp Desktop** — send messages to contacts reliably via desktop app.
+- **Message platforms** — extensible support for multiple messaging services.
+- **Contact management** — search and verify recipients before sending.
+
+### Information & Utilities
+- **Weather lookup** — get current conditions for any location.
+- **Web search** — search Google and retrieve results.
+- **YouTube** — find and play videos.
+- **Reminders** — set and manage time-based reminders.
+
+### Intelligence & Memory
+- **Long-term memory** — store and recall user preferences and past interactions.
+- **Smart planning** — decompose complex requests into steps.
+- **Context-aware execution** — adapt behavior based on user history.
+- **Error recovery** — graceful fallbacks and user prompts on failures.
+
+### Developer-Friendly
+- **Modular action architecture** — easily add new skills and commands.
+- **Debug snapshots** — automated screenshot capture for troubleshooting.
+- **Comprehensive logging** — full audit trail to `jarvis_log.txt`.
+- **Extensible configuration** — API keys, behavior settings, and customization.
+
+---
+
+## 📋 Quick Start
+
+### Requirements
+- **Windows 10/11** (or later)
+- **Python 3.11+**
+- **Microphone** (for voice input)
+- **Optional**: Tesseract OCR (for advanced verification)
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/prasanthmukkiri/JARVIS--PERSONAL-AI-ASSISTENT.git
+   cd Jarvis-MK37
+   ```
+
+2. **Create and activate a virtual environment:**
+   ```bash
+   python -m venv .venv
+   .venv\Scripts\activate
+   ```
+
+3. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Configure API keys** (optional, for web/weather/LLM features):
+   ```bash
+   # Edit config/api_keys.json and add your keys
+   ```
+
+5. **Run the assistant:**
+   ```bash
+   python main.py
+   ```
+
+---
+
+## 💬 Usage Examples
+
+Once running, speak to JARVISS after the wake-word:
+
+```
+"Jarvis, open Chrome"
+→ Launches Google Chrome
+
+"Jarvis, send a message to Prasanth"
+→ Opens WhatsApp, finds Prasanth, and prompts for message
+
+"Jarvis, search for Python tutorials"
+→ Performs a web search and displays results
+
+"Jarvis, what's the weather in London?"
+→ Fetches and reads current weather
+
+"Jarvis, remind me to call Mom at 6 PM"
+→ Sets a reminder and stores it locally
 ```
 
-## Screenshots
+---
 
-These workflow snapshots were captured during development:
+## 🏗️ Architecture
 
-![Before typing](tools/send_debug/20260503T100913583280_before_paste.png)
+### Directory Structure
 
-![After focusing the input](tools/send_debug/20260503T100914689841_after_click_input.png)
+```
+├── main.py                  # Entry point
+├── ui.py                    # User interface
+├── wake_word.py            # Wake-word detection
+├── requirements.txt        # Dependencies
+├── actions/                # Automation modules
+│   ├── send_message.py     # WhatsApp, messaging
+│   ├── browser_control.py  # Browser automation
+│   ├── web_search.py       # Web search
+│   ├── weather_report.py   # Weather API
+│   ├── open_app.py         # App launching
+│   └── ...
+├── agent/                  # Planning & execution
+│   ├── planner.py         # Task decomposition
+│   ├── executor.py        # Command execution
+│   └── error_handler.py
+├── memory/                # Persistence
+│   ├── memory_manager.py
+│   └── long_term.json
+├── config/                # Configuration
+│   └── api_keys.json
+├── core/                  # Core prompts
+│   └── prompt.txt
+├── models/               # Pre-trained models
+│   └── vosk-en/
+├── tools/               # Dev utilities
+│   └── send_debug/      # Debug screenshots
+└── docs/                # Documentation
+    ├── ARCHITECTURE.md
+    ├── SETUP.md
+    └── ACTIONS.md
+```
 
-![After sending the message](tools/send_debug/20260503T100915930001_after_send.png)
+---
 
-## Ownership
+## 📦 Dependencies
 
-This project is fully owned, authored, and created by Prasanth Mukkiri.
+- **pyautogui** — Desktop automation.
+- **pywinauto** — Windows UI automation.
+- **vosk** — Offline speech recognition.
+- **pyperclip** — Clipboard management.
+- **pytesseract** — OCR (optional).
 
-Prasanth Mukkiri is the sole maker, sole owner, and original author of this project. No other personal authorship, ownership, or contributor credits are included in this README.
+See `requirements.txt` for full list.
 
-If the project is reused, shared, or referenced elsewhere, Prasanth Mukkiri must remain clearly credited as the official owner and maker.
+---
 
-## Features
+## 📚 Documentation
 
-- Voice wake-word detection and assistant conversation flow
-- Desktop app launching and control
-- Browser automation and web search
-- Messaging support for supported platforms
-- Weather lookup and reminders
-- Screen processing and visual task support
-- YouTube video search and playback
-- Memory handling and prompt-based assistant logic
-- Helper tools for code, files, games, and device actions
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — System design and technical details.
+- **[SETUP.md](docs/SETUP.md)** — Installation and troubleshooting.
+- **[ACTIONS.md](docs/ACTIONS.md)** — Available commands and actions.
+- **[API_REFERENCE.md](docs/API_REFERENCE.md)** — How to add custom actions.
 
-## Project Layout
+---
 
-- `main.py` - application entry point
-- `ui.py` - assistant UI
-- `wake_word.py` - wake-word detector
-- `actions/` - task-specific automation modules
-- `agent/` - planning, execution, and error handling
-- `memory/` - local memory management
-- `config/` - configuration and API key files
-- `core/` - prompt and assistant core text
-- `models/` - bundled speech and AI model assets
-
-## Setup
-
-Install dependencies:
+## 🧪 Testing
 
 ```bash
-pip install -r requirements.txt
+# Test WhatsApp send
+python tools/test_send.py
+
+# Enable debug mode
+import sys
+sys._send_debug = True
 ```
 
-Optional setup script:
+Debug artifacts: `tools/send_debug/`
 
-```bash
-python setup.py
-```
+---
 
-## Run
+## 🐛 Troubleshooting
 
-Start the assistant:
+### Microphone not detected
+- Check Windows Sound Settings.
+- Restart the application.
 
-```bash
-python main.py
-```
+### Commands not recognized
+- Speak clearly after wake-word.
+- Verify microphone volume.
 
-## Notes
+### WhatsApp send fails
+- Ensure WhatsApp Desktop is installed.
+- Check contact name exists.
+- See `tools/send_debug/` screenshots.
 
-- Designed primarily for Windows desktop automation.
-- Some features depend on installed apps, browser access, and valid API keys.
-- Logs are written to `jarvis_log.txt`.
-- Development snapshots used for debugging are stored under `tools/send_debug/`.
+---
 
-## Official Status
+## 🚀 Roadmap
 
-This repository is the official JARVISS project maintained by Prasanth Mukkiri.
+- [ ] Multi-language support
+- [ ] Cloud sync
+- [ ] Community plugins
+- [ ] Mobile app
+- [ ] Email & calendar integration
 
-## License
+---
 
-No license is declared yet. All rights are reserved by Prasanth Mukkiri unless a separate license is added later.
+## 🤝 Contributing
+
+1. Fork the repository.
+2. Create a feature branch: `git checkout -b feature/your-feature`.
+3. Commit changes: `git commit -m "Add feature"`.
+4. Push and open a pull request.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+---
+
+## 👤 Author & Ownership
+
+**Prasanth Mukkiri** — Sole creator, owner, and developer of JARVISS.
+
+This project represents original work in personal AI assistant development, desktop automation, and voice command processing.
+
+---
+
+## 📄 License
+
+**Proprietary** — All rights reserved by Prasanth Mukkiri. Unauthorized copying or distribution is prohibited.
+
+---
+
+**Made with ❤️ by Prasanth Mukkiri**
