@@ -296,8 +296,26 @@ def _pywinauto_whatsapp_send(receiver: str, message: str, debug_dir: str | None 
                 pass
 
             if not opened:
+                # Try keyboard navigation to open first search result
+                send_keys('{DOWN}')
+                time.sleep(0.1)
                 send_keys('{ENTER}')
-                time.sleep(0.8)
+                time.sleep(0.6)
+                opened = True
+
+            if not opened:
+                # As a fallback, click the first visible list item in the chat list
+                try:
+                    list_items = [c for c in win.descendants(control_type="ListItem") if c.is_visible()]
+                    if list_items:
+                        try:
+                            list_items[0].click_input()
+                        except Exception:
+                            list_items[0].click()
+                        time.sleep(0.6)
+                        opened = True
+                except Exception:
+                    pass
             tried = True
         except Exception:
             # if UIA search Edit not found, fall back to clicking the search box area
@@ -324,6 +342,9 @@ def _pywinauto_whatsapp_send(receiver: str, message: str, debug_dir: str | None 
                 time.sleep(0.12)
                 pyautogui.write(receiver, interval=0.03)
                 time.sleep(0.45)
+                # Prefer opening the first result explicitly
+                pyautogui.press('down')
+                time.sleep(0.1)
                 pyautogui.press('enter')
                 time.sleep(0.8)
                 tried = True
