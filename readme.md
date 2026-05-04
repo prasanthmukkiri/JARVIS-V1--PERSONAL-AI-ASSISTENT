@@ -4,7 +4,7 @@
 
 JARVISS is a sophisticated personal AI assistant that turns natural language voice commands into automated desktop actions. Combining speech recognition, LLM-based planning, and multi-platform automation, JARVISS can control your computer, search the web, send messages, manage files, and more—all through simple spoken commands.
 
-![Version](https://img.shields.io/badge/version-MK37-blue)
+![Version](https://img.shields.io/badge/version-V1-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-important)
 ![Python](https://img.shields.io/badge/python-3.11%2B-brightgreen)
 ![License](https://img.shields.io/badge/license-Proprietary-red)
