@@ -167,6 +167,7 @@ See `requirements.txt` for full list.
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — System design and technical details.
 - **[SETUP.md](docs/SETUP.md)** — Installation and troubleshooting.
 - **[ACTIONS.md](docs/ACTIONS.md)** — Available commands and actions.
+- **[TEST_CHECKLIST.md](docs/TEST_CHECKLIST.md)** — End-to-end test checklist for Jarvis.
 - **[API_REFERENCE.md](docs/API_REFERENCE.md)** — How to add custom actions.
 
 ---

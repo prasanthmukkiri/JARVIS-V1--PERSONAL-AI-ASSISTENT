@@ -342,31 +342,99 @@ def _pywinauto_whatsapp_send(receiver: str, message: str, debug_dir: str | None 
         # Paste or type message into the message input control when possible
         sent = False
         try:
-            # try to find message edit box
+            # Try UIA child window first (preferred)
+            msg = None
             try:
                 msg = win.child_window(title_re="(Type a message|Message|Write a message)", control_type="Edit")
                 msg.set_focus()
-                time.sleep(0.08)
-                if _PYPERCLIP:
-                    pyperclip.copy(message)
-                    time.sleep(0.08)
-                    send_keys('^v')
-                else:
-                    msg.type_keys(message, with_spaces=True)
-                time.sleep(0.12)
-                send_keys('{ENTER}')
-                sent = True
             except Exception:
-                # fallback to keyboard paste/type
-                if _PYPERCLIP:
-                    pyperclip.copy(message)
-                    time.sleep(0.08)
-                    send_keys('^v')
-                else:
-                    send_keys(message, with_spaces=True)
-                time.sleep(0.12)
-                send_keys('{ENTER}')
-                sent = True
+                # Try to locate any Edit control in the bottom area of the window
+                try:
+                    edits = [c for c in win.descendants(control_type="Edit") if c.is_visible()]
+                    if edits:
+                        wr = win.rectangle()
+                        bottom_threshold = wr.top + int(wr.height() * 0.78)
+                        bottom_edits = [e for e in edits if getattr(e, 'rectangle', lambda: wr)().top >= bottom_threshold]
+                        if bottom_edits:
+                            msg = bottom_edits[-1]
+                            msg.set_focus()
+                except Exception:
+                    msg = None
+
+            # If we have an edit control, paste/type into it
+            if msg is not None:
+                time.sleep(0.08)
+                try:
+                    if _PYPERCLIP:
+                        pyperclip.copy(message)
+                        time.sleep(0.08)
+                        send_keys('^v')
+                    else:
+                        # use control's type_keys when available
+                        try:
+                            msg.type_keys(message, with_spaces=True)
+                        except Exception:
+                            send_keys(message, with_spaces=True)
+                    time.sleep(0.12)
+                except Exception:
+                    pass
+            else:
+                # Click approximate composer area on right/bottom, then paste/type
+                try:
+                    rect = win.rectangle()
+                    cx = rect.left + int(rect.width() * 0.72)
+                    cy = rect.top + int(rect.height() * 0.92)
+                    if _PYAUTOGUI:
+                        pyautogui.click(cx, cy)
+                    else:
+                        try:
+                            win.click_input(coords=(cx - rect.left, cy - rect.top))
+                        except Exception:
+                            pass
+                    time.sleep(0.12)
+                except Exception:
+                    pass
+
+                try:
+                    if _PYPERCLIP:
+                        pyperclip.copy(message)
+                        time.sleep(0.08)
+                        send_keys('^v')
+                    else:
+                        send_keys(message, with_spaces=True)
+                    time.sleep(0.12)
+                except Exception:
+                    pass
+
+            # Try to click a visible Send button (green) if present, otherwise press Enter
+            clicked_send = False
+            try:
+                btns = [b for b in win.descendants(control_type="Button") if b.is_visible()]
+                for b in btns:
+                    name = (b.element_info.name or "").lower()
+                    if 'send' in name or 'arrow' in name or 'paper plane' in name:
+                        try:
+                            b.click_input()
+                            clicked_send = True
+                            break
+                        except Exception:
+                            try:
+                                b.click()
+                                clicked_send = True
+                                break
+                            except Exception:
+                                continue
+            except Exception:
+                clicked_send = False
+
+            if not clicked_send:
+                try:
+                    send_keys('{ENTER}')
+                except Exception:
+                    if _PYAUTOGUI:
+                        pyautogui.press('enter')
+
+            sent = True
         except Exception:
             sent = False
         time.sleep(0.2)

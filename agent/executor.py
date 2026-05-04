@@ -171,6 +171,33 @@ def _translate_to_goal_language(content: str, goal: str) -> str:
         print(f"[Executor] ⚠️ Translation failed: {e}")
         return content
 
+
+def _normalize_plan_steps(plan: dict) -> dict:
+    if not isinstance(plan, dict):
+        return {"goal": "", "steps": []}
+
+    raw_steps = plan.get("steps") or []
+    normalized_steps = []
+
+    for index, raw_step in enumerate(raw_steps, start=1):
+        if not isinstance(raw_step, dict):
+            continue
+
+        normalized_step = dict(raw_step)
+        normalized_step["step"] = raw_step.get("step") or index
+        normalized_step["tool"] = str(raw_step.get("tool", "")).strip()
+        normalized_step["description"] = str(raw_step.get("description", "")).strip() or f"Step {index}"
+
+        parameters = raw_step.get("parameters") or {}
+        if not isinstance(parameters, dict):
+          parameters = {}
+        normalized_step["parameters"] = dict(parameters)
+        normalized_steps.append(normalized_step)
+
+    normalized_plan = dict(plan)
+    normalized_plan["steps"] = normalized_steps
+    return normalized_plan
+
 def _call_tool(tool: str, parameters: dict, speak: Callable | None) -> str:
 
     if tool == "open_app":
@@ -261,7 +288,7 @@ class AgentExecutor:
         replan_attempts = 0
         completed_steps = []
         step_results    = {} 
-        plan            = create_plan(goal)
+        plan            = _normalize_plan_steps(create_plan(goal))
 
         while True:
             steps = plan.get("steps", [])
@@ -376,7 +403,7 @@ class AgentExecutor:
             if speak: speak("Adjusting my approach, sir.")
 
             replan_attempts += 1
-            plan = replan(goal, completed_steps, failed_step, failed_error)
+            plan = _normalize_plan_steps(replan(goal, completed_steps, failed_step, failed_error))
 
     def _summarize(self, goal: str, completed_steps: list, speak: Callable | None) -> str:
         fallback = f"All done, sir. Completed {len(completed_steps)} steps for: {goal[:60]}."

@@ -173,6 +173,10 @@ OUTPUT — return ONLY valid JSON, no markdown, no explanation, no code blocks:
 
 _DIRECT_MESSAGE_PATTERNS = [
   re.compile(
+    r"^\s*(?:please\s+)?send\s+(?:(?:a|an|the)\s+)?message\s+to\s+(?P<receiver>.+?)\s+saying\s+(?P<message>.+?)\s*$",
+    re.IGNORECASE,
+  ),
+  re.compile(
     r"^\s*(?:please\s+)?send\s+message\s+to\s+(?P<receiver>.+?)\s+on\s+(?P<platform>whatsapp|telegram|signal|discord|instagram|messenger)\s+saying\s+(?P<message>.+?)\s*$",
     re.IGNORECASE,
   ),
@@ -182,6 +186,10 @@ _DIRECT_MESSAGE_PATTERNS = [
   ),
   re.compile(
     r"^\s*(?:please\s+)?send\s+(?P<message>.+?)\s+to\s+(?P<receiver>.+?)\s+on\s+(?P<platform>whatsapp|telegram|signal|discord|instagram|messenger)\s*$",
+    re.IGNORECASE,
+  ),
+  re.compile(
+    r"^\s*(?:please\s+)?send\s+(?:(?:a|an|the)\s+)?message\s+to\s+(?P<receiver>.+?)\s*$",
     re.IGNORECASE,
   ),
   re.compile(
@@ -230,6 +238,63 @@ def _build_direct_message_plan(goal: str) -> dict | None:
           }
         ],
       }
+
+  return None
+
+
+def _build_heuristic_plan(goal: str) -> dict | None:
+  normalized = re.sub(r"\s+", " ", (goal or "")).strip()
+  if not normalized:
+    return None
+
+  lowered = normalized.lower()
+
+  def _one_step(tool: str, description: str, parameters: dict, critical: bool = True) -> dict:
+    return {
+      "goal": goal,
+      "steps": [
+        {
+          "step": 1,
+          "tool": tool,
+          "description": description,
+          "parameters": parameters,
+          "critical": critical,
+        }
+      ],
+    }
+
+  open_match = re.match(r"^(?:please\s+)?(?:open|launch|start)\s+(?P<app>.+)$", normalized, re.IGNORECASE)
+  if open_match:
+    app_name = _clean_value(open_match.group("app"))
+    return _one_step("open_app", f"Open {app_name}", {"app_name": app_name})
+
+  if any(word in lowered for word in ("weather", "temperature", "forecast")):
+    city = ""
+    city_match = re.search(r"(?:in|for|at)\s+(?P<city>[A-Za-z][A-Za-z\s\.-]{1,60})\s*$", normalized, re.IGNORECASE)
+    if city_match:
+      city = _clean_value(city_match.group("city"))
+    return _one_step("weather_report", f"Get weather for {city or 'the requested location'}", {"city": city or normalized})
+
+  if any(word in lowered for word in ("youtube", "video", "play")):
+    query = normalized
+    query_match = re.search(r"(?:play|show|find|search(?: for)?)\s+(?:a\s+)?(?:youtube\s+)?(?:video\s+)?(?:about|on)?\s*(?P<query>.+)$", normalized, re.IGNORECASE)
+    if query_match:
+      query = _clean_value(query_match.group("query"))
+    return _one_step("youtube_video", f"Play YouTube video for {query}", {"action": "play", "query": query})
+
+  search_match = re.match(r"^(?:please\s+)?(?:search|find|look up|google)\s+(?:for\s+)?(?P<query>.+)$", normalized, re.IGNORECASE)
+  if search_match:
+    query = _clean_value(search_match.group("query"))
+    return _one_step("web_search", f"Search the web for {query}", {"query": query})
+
+  if any(word in lowered for word in ("file", "folder", "desktop", "documents", "downloads")):
+    if "list" in lowered or "show" in lowered or "what" in lowered:
+      path = "desktop"
+      if "downloads" in lowered:
+        path = "downloads"
+      elif "documents" in lowered:
+        path = "documents"
+      return _one_step("file_controller", f"List files in {path}", {"action": "list", "path": path})
 
   return None
 
@@ -289,44 +354,49 @@ def create_plan(goal: str, context: str = "") -> dict:
     print("[Planner] ⚡ Direct message plan built locally")
     return direct_plan
 
+  heuristic_plan = _build_heuristic_plan(goal)
+  if heuristic_plan:
+    print("[Planner] ⚡ Heuristic plan built locally")
+    return _normalize_plan(heuristic_plan, goal)
+
+  try:
     import google.generativeai as genai
 
     genai.configure(api_key=_get_api_key())
     model = genai.GenerativeModel(
         model_name="gemini-2.5-flash-lite",
-        system_instruction=PLANNER_PROMPT
+        system_instruction=PLANNER_PROMPT,
     )
 
     user_input = f"Goal: {goal}"
     if context:
-        user_input += f"\n\nContext: {context}"
+      user_input += f"\n\nContext: {context}"
 
-    try:
-        response = model.generate_content(user_input)
-        text     = response.text.strip()
-        text     = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
+    response = model.generate_content(user_input)
+    text = response.text.strip()
+    text = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
 
-        plan = _normalize_plan(json.loads(text), goal)
+    plan = _normalize_plan(json.loads(text), goal)
 
-        for step in plan["steps"]:
-            if step.get("tool") in ("generated_code",):
-                print(f"[Planner] ⚠️ generated_code detected in step {step.get('step')} — replacing with web_search")
-                desc = step.get("description", goal)
-                step["tool"] = "web_search"
-                step["parameters"] = {"query": desc[:200]}
+    for step in plan["steps"]:
+      if step.get("tool") in ("generated_code",):
+        print(f"[Planner] ⚠️ generated_code detected in step {step.get('step')} — replacing with web_search")
+        desc = step.get("description", goal)
+        step["tool"] = "web_search"
+        step["parameters"] = {"query": desc[:200]}
 
-        print(f"[Planner] ✅ Plan: {len(plan['steps'])} steps")
-        for s in plan["steps"]:
-            print(f"  Step {s['step']}: [{s['tool']}] {s['description']}")
+    print(f"[Planner] ✅ Plan: {len(plan['steps'])} steps")
+    for s in plan["steps"]:
+      print(f"  Step {s['step']}: [{s['tool']}] {s['description']}")
 
-        return plan
+    return plan
 
-    except json.JSONDecodeError as e:
-        print(f"[Planner] ⚠️ JSON parse failed: {e}")
-        return _fallback_plan(goal)
-    except Exception as e:
-        print(f"[Planner] ⚠️ Planning failed: {e}")
-        return _fallback_plan(goal)
+  except json.JSONDecodeError as e:
+    print(f"[Planner] ⚠️ JSON parse failed: {e}")
+    return _fallback_plan(goal)
+  except Exception as e:
+    print(f"[Planner] ⚠️ Planning failed: {e}")
+    return _fallback_plan(goal)
 
 
 def _fallback_plan(goal: str) -> dict:

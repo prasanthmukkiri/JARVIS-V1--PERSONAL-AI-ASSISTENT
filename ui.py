@@ -19,18 +19,22 @@ API_FILE   = CONFIG_DIR / "api_keys.json"
 SYSTEM_NAME = "J.A.R.V.I.S"
 MODEL_BADGE = "MARK XXXVII"
 
-C_BG     = "#000000"
-C_PRI    = "#00d4ff"
-C_MID    = "#007a99"
-C_DIM    = "#003344"
-C_DIMMER = "#001520"
-C_ACC    = "#ff6600"
-C_ACC2   = "#ffcc00"
-C_TEXT   = "#8ffcff"
-C_PANEL  = "#010c10"
-C_GREEN  = "#00ff88"
-C_RED    = "#ff3333"
-C_MUTED  = "#ff3366"
+C_BG      = "#02070b"
+C_BG2     = "#061018"
+C_PRI     = "#47dbff"
+C_MID     = "#2f8ea8"
+C_DIM     = "#113243"
+C_DIMMER  = "#07141b"
+C_ACC     = "#ff8a5b"
+C_ACC2    = "#ffd166"
+C_TEXT    = "#d5fbff"
+C_PANEL   = "#08141c"
+C_GLASS   = "#0b1821"
+C_GREEN   = "#24f0a4"
+C_RED     = "#ff5f70"
+C_MUTED   = "#ff7ba0"
+C_HILITE  = "#1d5f72"
+C_SOFT    = "#0b1620"
 
 
 class JarvisUI:
@@ -38,6 +42,10 @@ class JarvisUI:
         self.root = tk.Tk()
         self.root.title("J.A.R.V.I.S — MARK XXXVII")
         self.root.resizable(False, False)
+        try:
+            self.root.attributes("-alpha", 0.985)
+        except Exception:
+            pass
 
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
@@ -81,19 +89,19 @@ class JarvisUI:
         self._load_face(face_path)
 
         self.bg = tk.Canvas(self.root, width=W, height=H,
-                            bg=C_BG, highlightthickness=0)
+                    bg=C_BG, highlightthickness=0)
         self.bg.place(x=0, y=0)
 
         LW = int(W * 0.72)
         LH = 110
         LOG_Y = H - LH - 80
         self.log_frame = tk.Frame(self.root, bg=C_PANEL,
-                                  highlightbackground=C_MID,
+                                  highlightbackground=C_HILITE,
                                   highlightthickness=1)
         self.log_frame.place(x=(W - LW) // 2, y=LOG_Y, width=LW, height=LH)
-        self.log_text = tk.Text(self.log_frame, fg=C_TEXT, bg=C_PANEL,
+        self.log_text = tk.Text(self.log_frame, fg=C_TEXT, bg=C_GLASS,
                                 insertbackground=C_TEXT, borderwidth=0,
-                                wrap="word", font=("Courier", 10), padx=10, pady=6)
+                                wrap="word", font=("Courier New", 10), padx=10, pady=6)
         self.log_text.pack(fill="both", expand=True)
         self.log_text.configure(state="disabled")
         self.log_text.tag_config("you", foreground="#e8e8e8")
@@ -195,12 +203,12 @@ class JarvisUI:
         self._input_entry = tk.Entry(
             self.root,
             textvariable=self._input_var,
-            fg=C_TEXT, bg="#000d12",
+            fg=C_TEXT, bg=C_SOFT,
             insertbackground=C_TEXT,
             borderwidth=0,
-            font=("Courier", 10),
+            font=("Courier New", 10),
             highlightthickness=1,
-            highlightbackground=C_DIM,
+            highlightbackground=C_HILITE,
             highlightcolor=C_PRI,
         )
         self._input_entry.place(x=x0, y=y, width=INP_W, height=28)
@@ -211,12 +219,12 @@ class JarvisUI:
             self.root,
             text="SEND ▸",
             command=self._on_input_submit,
-            fg=C_PRI, bg=C_PANEL,
+            fg=C_PRI, bg="#09131a",
             activeforeground=C_BG, activebackground=C_PRI,
-            font=("Courier", 9, "bold"),
+            font=("Courier New", 9, "bold"),
             borderwidth=0, cursor="hand2",
             highlightthickness=1,
-            highlightbackground=C_MID,
+            highlightbackground=C_HILITE,
         )
         self._send_btn.place(x=x0 + INP_W + 4, y=y, width=BTN_W, height=28)
 
@@ -238,21 +246,30 @@ class JarvisUI:
         if state == "MUTED":
             self.status_text = "MUTED"
             self.speaking    = False
+            status_fg = C_MUTED
         elif state == "SPEAKING":
             self.status_text = "SPEAKING"
             self.speaking    = True
+            status_fg = C_ACC
         elif state == "THINKING":
             self.status_text = "THINKING"
             self.speaking    = False
+            status_fg = C_ACC2
         elif state == "LISTENING":
             self.status_text = "LISTENING"
             self.speaking    = False
+            status_fg = C_GREEN
         elif state == "PROCESSING":
             self.status_text = "PROCESSING"
             self.speaking    = False
+            status_fg = C_ACC2
         else:
             self.status_text = "ONLINE"
             self.speaking    = False
+            status_fg = C_PRI
+
+        if hasattr(self, "_status_chip"):
+            self._status_chip.configure(text=self.status_text, fg=status_fg)
 
     def _load_face(self, path):
         FW = self.FACE_SZ
