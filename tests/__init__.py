@@ -1,1 +1,1 @@
-# Test suite for Jarvis-MK37
+# Test suite for Jarvis V1

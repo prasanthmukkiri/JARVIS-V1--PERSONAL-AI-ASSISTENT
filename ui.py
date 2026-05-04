@@ -17,7 +17,7 @@ CONFIG_DIR = BASE_DIR / "config"
 API_FILE   = CONFIG_DIR / "api_keys.json"
 
 SYSTEM_NAME = "J.A.R.V.I.S"
-MODEL_BADGE = "MARK XXXVII"
+MODEL_BADGE = "Jarvis V1"
 
 C_BG      = "#02070b"
 C_BG2     = "#061018"
@@ -40,7 +40,7 @@ C_SOFT    = "#0b1620"
 class JarvisUI:
     def __init__(self, face_path, size=None):
         self.root = tk.Tk()
-        self.root.title("J.A.R.V.I.S — MARK XXXVII")
+        self.root.title("J.A.R.V.I.S — Jarvis V1")
         self.root.resizable(False, False)
         try:
             self.root.attributes("-alpha", 0.985)
@@ -509,7 +509,7 @@ class JarvisUI:
         c.create_text(W - 16, H - 14, fill=C_DIM, font=("Courier", 8),
                       text="[F4] MUTE", anchor="e")
         c.create_text(W // 2, H - 14, fill=C_DIM, font=("Courier", 8),
-                      text="Prasanth Mukkiri Industries  ·  CLASSIFIED  ·  MARK XXXVII")
+                      text="Prasanth Mukkiri Industries  ·  CLASSIFIED  ·  Jarvis V1")
 
     def write_log(self, text: str):
         self.typing_queue.append(text)

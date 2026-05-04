@@ -1,4 +1,4 @@
-Jarvis-MK37 — Vision
+Jarvis V1 — Vision
 
 Mission
 - Build a reliable, extensible, and privacy-respecting personal AI assistant for desktop automation, research, and developer tooling.

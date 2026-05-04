@@ -1,11 +1,11 @@
-# Contributing to Jarvis-MK37
+# Contributing to Jarvis V1
 
 ## Quick Setup
 
 ```bash
 # Clone and setup
 git clone https://github.com/prasanthmukkiri/JARVIS--PERSONAL-AI-ASSISTENT.git
-cd Jarvis-MK37
+cd Jarvis-V1
 
 # Create virtual environment
 python -m venv venv

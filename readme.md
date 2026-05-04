@@ -62,7 +62,7 @@ JARVISS is a sophisticated personal AI assistant that turns natural language voi
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/prasanthmukkiri/JARVIS--PERSONAL-AI-ASSISTENT.git
-   cd Jarvis-MK37
+   cd Jarvis-V1
    ```
 
 2. **Create and activate a virtual environment:**

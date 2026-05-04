@@ -10,7 +10,7 @@
 ## 📊 Directory Structure Analysis
 
 ```
-Jarvis-MK37/
+Jarvis V1/
 ├── .venv/                      ✅ Virtual environment (large but necessary)
 ├── .git/                       ✅ Git history (necessary)
 ├── __pycache__/                ⚠️  Cache (should be in .gitignore)
