@@ -1,11 +1,8 @@
-import subprocess
-import sys
+from setuptools import setup, find_packages
 
-print("Installing requirements...")
-subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
-
-print("Installing Playwright browsers...")
-subprocess.run([sys.executable, "-m", "playwright", "install"], check=True)
-
-print("\n✅ Setup complete! Run 'python main.py' to start Jarvis V1.")
+# Package metadata is defined in pyproject.toml
+# This setup.py exists for backwards compatibility
+setup(
+    packages=find_packages(exclude=["tests*", "docs*"]),
+)
 
