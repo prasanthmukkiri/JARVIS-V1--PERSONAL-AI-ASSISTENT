@@ -8,3 +8,5 @@ jarvis_log.txt
 tools/send_debug/
 config/api_keys.json
 memory/long_term.json
+.pytest_cache/
+*.png
