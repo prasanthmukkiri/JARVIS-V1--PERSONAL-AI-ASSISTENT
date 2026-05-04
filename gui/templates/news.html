@@ -243,6 +243,81 @@
             white-space: nowrap;
         }
 
+        .video-rail {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 18px;
+            margin-bottom: 20px;
+        }
+
+        .video-card {
+            background: linear-gradient(180deg, rgba(13, 21, 39, 0.98), rgba(7, 12, 22, 0.9));
+            border: 1px solid rgba(124,255,216,0.14);
+            border-radius: 22px;
+            padding: 14px;
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .video-card .frame {
+            position: relative;
+            border-radius: 16px;
+            overflow: hidden;
+            aspect-ratio: 16 / 9;
+            background: #02040a;
+            border: 1px solid rgba(255,255,255,0.06);
+            margin-bottom: 12px;
+        }
+
+        .video-card iframe {
+            width: 100%;
+            height: 100%;
+            border: 0;
+        }
+
+        .video-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .video-meta h3 {
+            margin: 0;
+            font-size: 1rem;
+            line-height: 1.4;
+        }
+
+        .video-meta p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 0.86rem;
+        }
+
+        .video-chip {
+            display: inline-flex;
+            align-items: center;
+            width: fit-content;
+            gap: 8px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid rgba(106,169,255,0.18);
+            background: rgba(106,169,255,0.08);
+            color: var(--accent-2);
+            font-size: 0.74rem;
+            text-transform: uppercase;
+            letter-spacing: 0.12em;
+        }
+
+        .video-loading {
+            grid-column: 1 / -1;
+            padding: 20px;
+            color: var(--muted);
+            text-align: center;
+            border: 1px dashed rgba(124,255,216,0.18);
+            border-radius: 18px;
+            background: rgba(255,255,255,0.02);
+        }
+
         .news-item {
             background: var(--panel-strong);
             border: 1px solid rgba(255,255,255,0.06);
@@ -331,6 +406,7 @@
         }
 
         @media (max-width: 1100px) {
+            .video-rail,
             .hero-grid, .split-grid { grid-template-columns: 1fr; }
         }
 
@@ -380,6 +456,16 @@
 
         <div id="error-container"></div>
 
+        <section class="section" style="margin-bottom: 20px;">
+            <div class="section-header">
+                <h2>🔥 Hot News Videos</h2>
+                <div class="section-tag">Playable feed</div>
+            </div>
+            <div id="news-videos" class="video-rail">
+                <div class="video-loading">Loading hot news videos...</div>
+            </div>
+        </section>
+
         <div class="layout">
             <section class="section">
                 <div class="section-header">
@@ -416,14 +502,21 @@
     <script>
         async function loadNews() {
             try {
-                const response = await fetch('/api/news');
-                const data = await response.json();
+                const [newsResponse, videosResponse] = await Promise.all([
+                    fetch('/api/news'),
+                    fetch('/api/news/videos')
+                ]);
+
+                const data = await newsResponse.json();
+                const videos = await videosResponse.json();
 
                 if (data.error) {
                     document.getElementById('error-container').innerHTML =
                         `<div class="error">⚠️ Error loading news: ${data.error}</div>`;
                     return;
                 }
+
+                renderVideos(videos.videos || []);
 
                 renderNews('south-india', data.south_india);
                 renderNews('india', data.india);
@@ -435,6 +528,39 @@
                 document.getElementById('error-container').innerHTML =
                     `<div class="error">⚠️ Failed to load news: ${error.message}</div>`;
             }
+        }
+
+        function renderVideos(videos) {
+            const container = document.getElementById('news-videos');
+
+            if (!videos || videos.length === 0) {
+                container.innerHTML = '<div class="video-loading">No hot news videos available right now</div>';
+                return;
+            }
+
+            container.innerHTML = videos.map(video => `
+                <article class="video-card">
+                    <div class="frame">
+                        <iframe
+                            src="${video.embed_url}"
+                            title="${video.title || 'Hot news video'}"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowfullscreen>
+                        </iframe>
+                    </div>
+                    <div class="video-meta">
+                        <div class="video-chip">${prettyRegion(video.region)}</div>
+                        <h3>${video.title || 'Untitled video'}</h3>
+                        <p>${video.channel || 'YouTube'}</p>
+                    </div>
+                </article>
+            `).join('');
+        }
+
+        function prettyRegion(region) {
+            if (region === 'south_india') return 'South India';
+            if (region === 'international') return 'International';
+            return 'India';
         }
 
         function renderNews(region, articles) {

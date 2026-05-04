@@ -29,6 +29,7 @@ import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
 from queue import Queue
+from urllib.parse import quote_plus
 
 import requests
 from flask import Flask, render_template, jsonify, request
@@ -53,6 +54,12 @@ _NEWS_FEEDS = {
     "india": "https://news.google.com/rss/search?q=India+when:2d&hl=en-IN&gl=IN&ceid=IN:en",
     "south_india": "https://news.google.com/rss/search?q=South+India+when:2d&hl=en-IN&gl=IN&ceid=IN:en",
     "international": "https://news.google.com/rss/search?q=world+when:2d&hl=en-IN&gl=IN&ceid=IN:en",
+}
+
+_NEWS_VIDEO_QUERIES = {
+    "south_india": "South India news latest",
+    "india": "India news latest",
+    "international": "world news latest",
 }
 
 # Shared log queue (injected from main.py)
@@ -127,6 +134,42 @@ def _safe_parse_news_feed(feed_name: str, feed_url: str) -> list[dict]:
         return []
 
 
+def _scrape_youtube_video(query: str) -> dict | None:
+    """Find the first playable YouTube video for a news query."""
+    try:
+        search_url = f"https://www.youtube.com/results?search_query={quote_plus(query)}&sp=EgIQAQ%3D%3D"
+        response = requests.get(
+            search_url,
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0", "Accept-Language": "en-US,en;q=0.9"},
+        )
+        response.raise_for_status()
+        page = response.text
+
+        video_id_match = re.search(r'"videoId":"([A-Za-z0-9_-]{11})"', page)
+        title_match = re.search(r'"title":\{"runs":\[\{"text":"([^"]+)"', page)
+        channel_match = re.search(r'"ownerText":\{"runs":\[\{"text":"([^"]+)"', page)
+
+        if not video_id_match:
+            return None
+
+        video_id = video_id_match.group(1)
+        title = html.unescape(title_match.group(1)) if title_match else query
+        channel = html.unescape(channel_match.group(1)) if channel_match else "YouTube"
+
+        return {
+            "title": title,
+            "channel": channel,
+            "video_id": video_id,
+            "watch_url": f"https://www.youtube.com/watch?v={video_id}",
+            "embed_url": f"https://www.youtube.com/embed/{video_id}?rel=0&modestbranding=1",
+            "query": query,
+        }
+    except Exception as e:
+        logger.warning(f"YouTube news video scrape failed for {query}: {e}")
+        return None
+
+
 @app.route("/api/news", methods=["GET"])
 def get_news():
     """Get current trending news for India, South India, and international."""
@@ -156,6 +199,38 @@ def get_news():
             "india": [],
             "south_india": [],
             "international": [],
+            "timestamp": datetime.now().isoformat(),
+        }), 500
+
+
+@app.route("/api/news/videos", methods=["GET"])
+def get_news_videos():
+    """Get hot news videos for South India, India, and international."""
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futures = {
+                name: executor.submit(_scrape_youtube_video, query)
+                for name, query in _NEWS_VIDEO_QUERIES.items()
+            }
+
+            videos = []
+            for name in ("south_india", "india", "international"):
+                video = futures[name].result()
+                if video:
+                    video["region"] = name
+                    videos.append(video)
+
+        return jsonify({
+            "success": True,
+            "videos": videos,
+            "timestamp": datetime.now().isoformat(),
+        })
+    except Exception as e:
+        logger.error(f"Error getting news videos: {e}")
+        return jsonify({
+            "success": False,
+            "error": str(e),
+            "videos": [],
             "timestamp": datetime.now().isoformat(),
         }), 500
 
