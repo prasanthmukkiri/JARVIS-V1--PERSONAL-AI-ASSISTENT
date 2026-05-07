@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JARVIS // NAV-SYS</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --c:   #00ffe7;
+      --b:   #1a8fff;
+      --r:   #ff0055;
+      --p:   #9b3dff;
+      --bg:  #000510;
+      --bg2: #020c1e;
+      --bg3: #04122a;
+      --br:  #0a1f3a;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      background:var(--bg); color:#8ab0cc;
+      font-family:'Share Tech Mono',monospace;
+      height:100vh; display:flex; flex-direction:column; overflow:hidden;
+    }
+
+    /* scanlines */
+    body::after {
+      content:''; position:fixed; inset:0; pointer-events:none; z-index:9998;
+      background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,.09) 3px,rgba(0,0,0,.09) 4px);
+    }
+
+    /* ══ BOOT ══════════════════════════════════════════════════════ */
+    #boot {
+      position:fixed; inset:0; background:var(--bg); z-index:99999;
+      display:flex; flex-direction:column; align-items:center; justify-content:center;
+      transition:opacity .7s ease;
+    }
+    .bl { color:var(--c); font-size:30px; letter-spacing:10px; margin-bottom:4px;
+      text-shadow:0 0 40px var(--c),0 0 80px rgba(0,255,231,.3); }
+    .bs { color:#112; font-size:9px; letter-spacing:5px; margin-bottom:36px; }
+    .bb { width:240px; height:1px; background:#091; overflow:hidden; position:relative; }
+    .bf { height:1px; background:linear-gradient(90deg,transparent,var(--c),var(--b));
+      width:0; box-shadow:0 0 10px var(--c); animation:bfill 1.1s ease forwards; }
+    @keyframes bfill { to{width:100%} }
+    .bm { color:var(--c); font-size:9px; letter-spacing:3px; margin-top:12px; opacity:.6; }
+
+    /* ══ HEADER ════════════════════════════════════════════════════ */
+    #hdr {
+      height:50px; padding:0 20px;
+      background:linear-gradient(90deg,rgba(0,20,50,.98),rgba(0,10,30,.98));
+      border-bottom:1px solid rgba(0,255,231,.15);
+      display:flex; align-items:center; gap:14px;
+      flex-shrink:0; z-index:100; position:relative;
+      box-shadow:0 0 60px rgba(0,255,231,.05);
+    }
+    #hdr::after {
+      content:''; position:absolute; bottom:-1px; left:0;
+      height:1px; width:30%;
+      background:linear-gradient(90deg,transparent,var(--c),var(--b),transparent);
+      animation:hdr-sweep 4s ease-in-out infinite;
+    }
+    @keyframes hdr-sweep { 0%{left:-30%} 100%{left:100%} }
+
+    .logo {
+      color:var(--c); font-size:16px; letter-spacing:5px;
+      text-shadow:0 0 20px var(--c),0 0 50px rgba(0,255,231,.2);
+    }
+    .hdiv { color:#0a2040; font-size:20px; }
+    #hdr-path { color:#2a5070; font-size:11px; letter-spacing:2px; }
+
+    .hdr-r { margin-left:auto; display:flex; align-items:center; gap:16px; }
+
+    /* status dots */
+    .sts { display:flex; align-items:center; gap:6px; font-size:9px; letter-spacing:1px; color:#1a4060; }
+    .sts-dot { width:6px; height:6px; border-radius:50%; background:var(--c);
+      box-shadow:0 0 6px var(--c); animation:dot-blink 2s ease-in-out infinite; }
+    @keyframes dot-blink { 0%,100%{opacity:.4} 50%{opacity:1} }
+
+    /* signal */
+    .sig { display:flex; gap:3px; align-items:flex-end; }
+    .sig span { width:3px; border-radius:1px; background:var(--b); animation:sig 2s ease-in-out infinite; }
+    .sig span:nth-child(1){height:4px;animation-delay:0s}
+    .sig span:nth-child(2){height:8px;animation-delay:.2s}
+    .sig span:nth-child(3){height:13px;animation-delay:.4s}
+    .sig span:nth-child(4){height:8px;animation-delay:.6s}
+    @keyframes sig { 0%,100%{opacity:.2} 50%{opacity:1} }
+
+    #clock { color:var(--c); font-size:12px; letter-spacing:2px; opacity:.6; }
+
+    #badge {
+      border:1px solid rgba(0,255,231,.3); color:var(--c);
+      font-size:9px; padding:4px 14px; letter-spacing:2px; border-radius:1px;
+      background:rgba(0,255,231,.04); position:relative; overflow:hidden;
+    }
+    #badge::after {
+      content:''; position:absolute; top:0; left:-100%; width:80%; height:100%;
+      background:linear-gradient(90deg,transparent,rgba(0,255,231,.15),transparent);
+      animation:shine 3s linear infinite;
+    }
+    @keyframes shine { to{left:120%} }
+
+    /* ══ LAYOUT ════════════════════════════════════════════════════ */
+    #layout { display:flex; flex:1; overflow:hidden; }
+
+    /* ══ SIDEBAR ═══════════════════════════════════════════════════ */
+    #sb {
+      width:300px; flex-shrink:0;
+      background:linear-gradient(180deg,rgba(2,12,30,.98),rgba(0,5,20,.99));
+      border-right:1px solid rgba(0,255,231,.08);
+      display:flex; flex-direction:column; overflow:hidden; position:relative;
+    }
+    /* animated left accent */
+    #sb::before {
+      content:''; position:absolute; left:0; top:0; width:2px; height:100%;
+      background:linear-gradient(180deg,var(--c),var(--b),transparent 70%);
+      opacity:.35;
+    }
+    /* hex pattern bg */
+    #sb::after {
+      content:''; position:absolute; inset:0; pointer-events:none; opacity:.025;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='56' height='100'%3E%3Cpath d='M28 66L0 50V17L28 0l28 17v33z' fill='none' stroke='%2300ffe7' stroke-width='1'/%3E%3Cpath d='M28 100L0 83V50l28-17 28 17v33z' fill='none' stroke='%2300ffe7' stroke-width='1'/%3E%3C/svg%3E");
+    }
+
+    .sb-top {
+      padding:10px 16px; border-bottom:1px solid rgba(0,255,231,.06);
+      display:flex; justify-content:space-between; align-items:center;
+      font-size:8px; letter-spacing:2.5px; position:relative; z-index:1;
+    }
+    .sb-top .sl { color:#1a4060; }
+    .sb-top .sr { color:rgba(26,143,255,.4); }
+
+    #sb-body { flex:1; overflow-y:auto; padding:12px; position:relative; z-index:1; }
+    #sb-body::-webkit-scrollbar { width:2px; }
+    #sb-body::-webkit-scrollbar-thumb { background:rgba(0,255,231,.1); }
+
+    /* stat grid */
+    .sg { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-bottom:9px; }
+    .sb {
+      background:rgba(0,30,60,.5); border-radius:3px;
+      border:1px solid rgba(0,255,231,.08);
+      border-top:1px solid rgba(0,255,231,.25);
+      padding:10px 8px; text-align:center;
+      position:relative; overflow:hidden;
+      animation:cdin .4s ease both;
+    }
+    .sb::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:1px;
+      background:linear-gradient(90deg,transparent,rgba(0,255,231,.5),transparent);
+    }
+    .sv {
+      display:block; color:var(--c); font-size:18px; line-height:1.1;
+      text-shadow:0 0 16px rgba(0,255,231,.5),0 0 30px rgba(0,255,231,.2);
+    }
+    .sl2 { display:block; color:#1a3050; font-size:8px; letter-spacing:2px; margin-top:4px; }
+
+    /* cards */
+    .card {
+      background:rgba(0,20,45,.6);
+      border:1px solid rgba(0,255,231,.07);
+      border-left:1px solid rgba(0,255,231,.4);
+      border-radius:3px; padding:11px 12px; margin-bottom:8px;
+      position:relative; overflow:hidden;
+      animation:cdin .35s ease both;
+      box-shadow:inset 0 0 20px rgba(0,100,255,.03);
+    }
+    .card::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:1px;
+      background:linear-gradient(90deg,rgba(0,255,231,.4),transparent);
+    }
+    @keyframes cdin { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:none} }
+
+    .card h3 {
+      color:var(--c); font-size:8px; letter-spacing:3px; text-transform:uppercase;
+      margin-bottom:9px; display:flex; align-items:center; gap:5px; opacity:.8;
+    }
+    .card h3::before { content:'◈'; font-size:8px; }
+
+    .row { display:flex; justify-content:space-between; padding:5px 0;
+      border-bottom:1px solid rgba(10,31,58,.9); font-size:11px; }
+    .row:last-child { border-bottom:none; }
+    .rk { color:#1a3050; }
+    .rv { color:#7ab0d0; text-align:right; max-width:155px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+    .step-row { display:flex; align-items:flex-start; gap:7px;
+      padding:6px 0; border-bottom:1px solid rgba(10,31,58,.9);
+      font-size:10px; color:#4a7090; line-height:1.5; }
+    .step-row:last-child { border-bottom:none; }
+    .sn {
+      min-width:16px; height:16px; display:flex; align-items:center; justify-content:center;
+      border:1px solid rgba(0,255,231,.2); border-radius:2px;
+      font-size:8px; color:var(--c); background:rgba(0,255,231,.04); flex-shrink:0;
+    }
+
+    .poi {
+      background:rgba(0,15,35,.6); border:1px solid rgba(0,255,231,.06);
+      border-left:2px solid transparent; border-radius:3px;
+      padding:9px 11px; margin-bottom:6px; cursor:pointer;
+      transition:all .15s; animation:cdin .3s ease both;
+    }
+    .poi:hover { border-left-color:var(--c); background:rgba(0,255,231,.03); transform:translateX(3px); }
+    .pi { color:rgba(0,255,231,.35); font-size:8px; letter-spacing:2px; margin-bottom:3px; }
+    .pn { color:#8ab0cc; font-size:11px; margin-bottom:2px; }
+    .pa { color:#1a3050; font-size:10px; line-height:1.4; }
+
+    /* ══ MAP AREA ══════════════════════════════════════════════════ */
+    #mw { flex:1; position:relative; overflow:hidden; }
+    #map { width:100%; height:100%; }
+
+    /* hex grid canvas */
+    #hex { position:absolute; inset:0; pointer-events:none; z-index:399; }
+
+    /* scan sweep */
+    #scan {
+      position:absolute; inset:0; pointer-events:none; z-index:400; overflow:hidden;
+    }
+    #scan::after {
+      content:''; position:absolute; left:0; right:0; height:120px;
+      background:linear-gradient(180deg,transparent,rgba(0,255,231,.04),rgba(26,143,255,.03),transparent);
+      animation:scan-go 8s linear infinite;
+    }
+    @keyframes scan-go { 0%{top:-120px} 100%{top:100%} }
+
+    /* HUD corners */
+    .hc { position:absolute; width:22px; height:22px; z-index:600; pointer-events:none; opacity:0;
+      animation:hc-in .6s ease forwards; }
+    @keyframes hc-in { to{opacity:1} }
+    .hc.tl{top:12px;left:12px;border-top:1px solid var(--c);border-left:1px solid var(--c);animation-delay:.1s}
+    .hc.tr{top:12px;right:12px;border-top:1px solid var(--c);border-right:1px solid var(--c);animation-delay:.2s}
+    .hc.bl{bottom:36px;left:12px;border-bottom:1px solid var(--c);border-left:1px solid var(--c);animation-delay:.3s}
+    .hc.br{bottom:36px;right:12px;border-bottom:1px solid var(--c);border-right:1px solid var(--c);animation-delay:.4s}
+    /* corner tick marks */
+    .hc::before,.hc::after { content:''; position:absolute; background:var(--c); }
+    .hc.tl::before{top:-1px;left:26px;width:8px;height:1px}
+    .hc.tl::after {left:-1px;top:26px;width:1px;height:8px}
+    .hc.tr::before{top:-1px;right:26px;width:8px;height:1px}
+    .hc.tr::after {right:-1px;top:26px;width:1px;height:8px}
+    .hc.bl::before{bottom:-1px;left:26px;width:8px;height:1px}
+    .hc.bl::after {left:-1px;bottom:26px;width:1px;height:8px}
+    .hc.br::before{bottom:-1px;right:26px;width:8px;height:1px}
+    .hc.br::after {right:-1px;bottom:26px;width:1px;height:8px}
+
+    /* coord bar */
+    #coord {
+      position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+      background:rgba(0,5,16,.9); border:1px solid rgba(0,255,231,.08);
+      border-radius:1px; padding:3px 18px;
+      font-size:9px; color:rgba(0,255,231,.3); letter-spacing:2px;
+      z-index:600; pointer-events:none; backdrop-filter:blur(8px); white-space:nowrap;
+    }
+
+    /* zoom HUD */
+    #zoom-hud {
+      position:absolute; bottom:8px; left:14px;
+      background:rgba(0,5,16,.9); border:1px solid rgba(0,255,231,.08);
+      border-radius:1px; padding:3px 12px;
+      font-size:9px; color:rgba(0,255,231,.35); letter-spacing:3px;
+      z-index:600; pointer-events:none; backdrop-filter:blur(8px);
+    }
+
+    /* tile switcher */
+    #tc { position:absolute; bottom:36px; left:14px; display:flex; gap:4px; z-index:600; }
+    .tb {
+      background:rgba(0,5,16,.9); border:1px solid rgba(0,255,231,.1);
+      color:#1a3050; font-family:'Share Tech Mono',monospace;
+      font-size:8px; letter-spacing:2px; padding:5px 10px;
+      border-radius:1px; cursor:pointer; transition:all .15s; backdrop-filter:blur(8px);
+    }
+    .tb:hover { border-color:rgba(0,255,231,.4); color:var(--c); }
+    .tb.on { border-color:rgba(0,255,231,.5); color:var(--c); background:rgba(0,255,231,.05);
+      box-shadow:0 0 10px rgba(0,255,231,.1); }
+
+    /* locate button */
+    #loc-btn {
+      position:absolute; bottom:80px; right:10px;
+      width:30px; height:30px; z-index:600;
+      background:rgba(0,5,16,.9); border:1px solid rgba(0,255,231,.15);
+      border-radius:1px; display:flex; align-items:center; justify-content:center;
+      cursor:pointer; color:var(--c); transition:all .15s; backdrop-filter:blur(8px);
+    }
+    #loc-btn:hover { border-color:var(--c); box-shadow:0 0 12px rgba(0,255,231,.2); }
+    #loc-btn.spin svg { animation:spin .8s linear infinite; }
+    @keyframes spin { to{transform:rotate(360deg)} }
+
+    /* route info card */
+    #rc {
+      position:absolute; top:18px; left:18px;
+      background:rgba(0,8,22,.95);
+      border:1px solid rgba(0,255,231,.3);
+      border-radius:3px; padding:14px 20px; display:none;
+      backdrop-filter:blur(16px); z-index:600;
+      box-shadow:0 0 40px rgba(0,255,231,.1),0 0 80px rgba(26,143,255,.05),
+                 inset 0 0 30px rgba(0,100,255,.03);
+    }
+    #rc::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:1px;
+      background:linear-gradient(90deg,transparent,var(--c),var(--b),transparent);
+    }
+    .rc-l { color:#0a2040; font-size:8px; letter-spacing:2px; margin-bottom:3px; }
+    #rc-d {
+      color:var(--c); font-size:26px; line-height:1;
+      text-shadow:0 0 20px rgba(0,255,231,.7),0 0 40px rgba(0,255,231,.3);
+    }
+    #rc-t { color:#2a4060; font-size:10px; margin-top:8px; padding-top:8px;
+      border-top:1px solid rgba(0,255,231,.06); }
+    .bdot { display:inline-block; width:5px; height:5px; border-radius:50%;
+      background:var(--c); margin-right:5px; vertical-align:middle;
+      box-shadow:0 0 6px var(--c); animation:blink 1s step-end infinite; }
+    @keyframes blink { 50%{opacity:0} }
+
+    /* Leaflet */
+    .leaflet-popup-content-wrapper {
+      background:rgba(0,8,22,.97)!important; border:1px solid rgba(0,255,231,.4)!important;
+      border-radius:3px!important; color:#8ab0cc!important;
+      font-family:'Share Tech Mono',monospace!important; font-size:11px!important;
+      box-shadow:0 0 30px rgba(0,255,231,.2)!important;
+    }
+    .leaflet-popup-tip { background:rgba(0,255,231,.6)!important; }
+    .leaflet-popup-content { margin:8px 14px!important; }
+    .leaflet-control-zoom { border:1px solid rgba(0,255,231,.1)!important; border-radius:2px!important; overflow:hidden; }
+    .leaflet-control-zoom a { background:rgba(0,8,22,.95)!important; color:var(--c)!important; border-color:rgba(0,255,231,.1)!important; font-size:15px!important; }
+    .leaflet-control-zoom a:hover { background:rgba(0,30,60,.95)!important; }
+    .leaflet-control-attribution { display:none!important; }
+
+    /* marker ring */
+    @keyframes ring-out {
+      0%  { transform:translate(-50%,-50%) scale(.5); opacity:.8; }
+      100%{ transform:translate(-50%,-50%) scale(4.5);opacity:0; }
+    }
+
+    /* you-dot */
+    .you-dot { width:10px; height:10px; border-radius:50%;
+      background:var(--p); border:2px solid rgba(0,0,0,.6);
+      box-shadow:0 0 10px var(--p),0 0 20px rgba(155,61,255,.4); }
+
+    /* weather card */
+    .wx-temp { color:var(--c); font-size:24px; letter-spacing:2px; margin:6px 0 3px;
+      text-shadow:0 0 18px rgba(0,255,231,.5); }
+    .wx-cond { color:#2a5070; font-size:9px; letter-spacing:2.5px; margin-bottom:8px; }
+
+    /* on-map search bar */
+    #map-search {
+      position:absolute; top:18px; right:18px;
+      display:flex; z-index:600;
+    }
+    #map-search input {
+      background:rgba(0,5,16,.92); border:1px solid rgba(0,255,231,.18);
+      border-right:none; color:var(--c); font-family:'Share Tech Mono',monospace;
+      font-size:10px; letter-spacing:1.5px; padding:7px 14px; outline:none;
+      border-radius:1px 0 0 1px; width:210px; backdrop-filter:blur(12px);
+      transition:border-color .15s;
+    }
+    #map-search input::placeholder { color:#0a2040; }
+    #map-search input:focus { border-color:rgba(0,255,231,.5); }
+    #map-search button {
+      background:rgba(0,255,231,.07); border:1px solid rgba(0,255,231,.18);
+      color:var(--c); font-family:'Share Tech Mono',monospace;
+      font-size:13px; padding:7px 12px; cursor:pointer;
+      border-radius:0 1px 1px 0; transition:all .15s; backdrop-filter:blur(12px);
+    }
+    #map-search button:hover { background:rgba(0,255,231,.18); border-color:rgba(0,255,231,.5);
+      box-shadow:0 0 12px rgba(0,255,231,.15); }
+  </style>
+</head>
+<body>
+
+<!-- boot -->
+<div id="boot">
+  <div class="bl">JARVIS</div>
+  <div class="bs">NAVIGATIONAL INTELLIGENCE SYSTEM</div>
+  <div class="bb"><div class="bf"></div></div>
+  <div class="bm" id="bm">INITIALIZING...</div>
+</div>
+
+<!-- header -->
+<div id="hdr">
+  <div class="logo">▸ JARVIS</div>
+  <div class="hdiv">/</div>
+  <div id="hdr-path">NAV-SYS</div>
+  <div class="hdr-r">
+    <div class="sts"><div class="sts-dot"></div>ONLINE</div>
+    <div class="sig"><span></span><span></span><span></span><span></span></div>
+    <div id="clock">--:--:--</div>
+    <div id="badge">INIT</div>
+  </div>
+</div>
+
+<div id="layout">
+  <!-- sidebar -->
+  <div id="sb">
+    <div class="sb-top"><span class="sl">INTEL FEED</span><span class="sr">NAV v3.0</span></div>
+    <div id="sb-body"><div id="sb-c"></div></div>
+  </div>
+
+  <!-- map -->
+  <div id="mw">
+    <canvas id="hex"></canvas>
+    <canvas id="particles" style="position:absolute;inset:0;pointer-events:none;z-index:450;"></canvas>
+    <div id="scan"></div>
+    <div class="hc tl"></div><div class="hc tr"></div>
+    <div class="hc bl"></div><div class="hc br"></div>
+    <div id="map"></div>
+
+    <!-- on-map search -->
+    <div id="map-search">
+      <input id="ms-input" type="text" placeholder="SEARCH LOCATION..." spellcheck="false" autocomplete="off" />
+      <button id="ms-btn">⌕</button>
+    </div>
+
+    <!-- tile switcher -->
+    <div id="tc">
+      <button class="tb on" data-l="dark">DARK</button>
+      <button class="tb" data-l="satellite">SAT</button>
+      <button class="tb" data-l="terrain">TERRAIN</button>
+    </div>
+
+    <!-- locate -->
+    <div id="loc-btn" title="My Location">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="7" cy="7" r="3"/>
+        <line x1="7" y1="0" x2="7" y2="3.5"/>
+        <line x1="7" y1="10.5" x2="7" y2="14"/>
+        <line x1="0" y1="7" x2="3.5" y2="7"/>
+        <line x1="10.5" y1="7" x2="14" y2="7"/>
+      </svg>
+    </div>
+
+    <!-- route card -->
+    <div id="rc">
+      <div class="rc-l">DISTANCE</div>
+      <div id="rc-d">—</div>
+      <div id="rc-t"><span class="bdot"></span>—</div>
+    </div>
+
+    <div id="coord">LAT — &nbsp;/&nbsp; LNG —</div>
+    <div id="zoom-hud">Z:—</div>
+  </div>
+</div>
+
+<script>
+/* ── boot ───────────────────────────────────────────────────────── */
+const bmEl = document.getElementById('bm');
+const bootEl = document.getElementById('boot');
+const bmsgs = ['LOADING MAP ENGINE...','CALIBRATING SENSORS...','CONNECTING OSM...','SYNCING INTEL...','ONLINE'];
+let bi = 0;
+const bt = setInterval(() => { bmEl.textContent = bmsgs[Math.min(bi++, bmsgs.length-1)]; if(bi>=bmsgs.length) clearInterval(bt); }, 240);
+setTimeout(() => { bootEl.style.opacity='0'; setTimeout(()=>bootEl.remove(),700); }, 1300);
+
+/* ── clock ───────────────────────────────────────────────────────── */
+(function tick(){ document.getElementById('clock').textContent=new Date().toTimeString().slice(0,8); setTimeout(tick,1000); })();
+
+/* ── hex grid canvas ─────────────────────────────────────────────── */
+function drawHexGrid() {
+  const canvas = document.getElementById('hex');
+  const mw = document.getElementById('mw');
+  canvas.width  = mw.offsetWidth;
+  canvas.height = mw.offsetHeight;
+  const ctx = canvas.getContext('2d');
+  ctx.strokeStyle = 'rgba(0,255,231,0.045)';
+  ctx.lineWidth = .8;
+  const R = 36, W = Math.sqrt(3)*R, H = 2*R;
+  for (let r = -1; r < canvas.height/H*1.4+2; r++) {
+    for (let c = -1; c < canvas.width/W+2; c++) {
+      const x = c*W + (r%2 ? W/2 : 0);
+      const y = r*H*.75;
+      ctx.beginPath();
+      for (let i=0;i<6;i++) {
+        const a = Math.PI/180*(60*i-30);
+        i===0 ? ctx.moveTo(x+R*Math.cos(a),y+R*Math.sin(a))
+              : ctx.lineTo(x+R*Math.cos(a),y+R*Math.sin(a));
+      }
+      ctx.closePath(); ctx.stroke();
+    }
+  }
+}
+drawHexGrid();
+window.addEventListener('resize', drawHexGrid);
+
+/* ── map init ────────────────────────────────────────────────────── */
+const params = new URLSearchParams(window.location.search);
+const action = params.get('action') || 'location';
+
+const map = L.map('map', { center:[20.5937,78.9629], zoom:4, zoomControl:false });
+
+const _tiles = {
+  dark:      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{subdomains:'abcd',maxZoom:20}),
+  satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:19}),
+  terrain:   L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{subdomains:'abc',maxZoom:17}),
+};
+let _al = _tiles.dark; _al.addTo(map);
+
+document.querySelectorAll('.tb').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const k = btn.dataset.l;
+    if (_tiles[k] === _al) return;
+    map.removeLayer(_al); _al = _tiles[k]; _al.addTo(map);
+    document.querySelectorAll('.tb').forEach(b=>b.classList.remove('on'));
+    btn.classList.add('on');
+  });
+});
+
+L.control.zoom({ position:'bottomright' }).addTo(map);
+
+/* live coords */
+map.on('mousemove', e => {
+  document.getElementById('coord').textContent =
+    `LAT ${e.latlng.lat.toFixed(5)}   /   LNG ${e.latlng.lng.toFixed(5)}`;
+});
+
+/* zoom HUD */
+function updateZoom(){
+  document.getElementById('zoom-hud').textContent='Z:'+map.getZoom();
+}
+map.on('zoom',updateZoom);
+updateZoom();
+
+/* ── locate me ───────────────────────────────────────────────────── */
+let _lmk = null;
+document.getElementById('loc-btn').addEventListener('click', function() {
+  if (!navigator.geolocation) return;
+  this.classList.add('spin');
+  const btn = this;
+  navigator.geolocation.getCurrentPosition(pos => {
+    btn.classList.remove('spin');
+    const lat=pos.coords.latitude, lng=pos.coords.longitude;
+    if (_lmk) map.removeLayer(_lmk);
+    _lmk = L.marker([lat,lng],{ icon:L.divIcon({
+      className:'', html:'<div class="you-dot"></div>',
+      iconSize:[10,10], iconAnchor:[5,5], popupAnchor:[0,-10]
+    })}).bindPopup('<span style="color:#9b3dff;letter-spacing:1px">▸ YOU ARE HERE</span>').addTo(map).openPopup();
+    map.flyTo([lat,lng], 14, {duration:1.5});
+    radarPing(lat, lng, '#9b3dff', 4000);
+  }, () => btn.classList.remove('spin'), {timeout:8000});
+});
+
+/* ── SVG pin marker ──────────────────────────────────────────────── */
+let _pid = 0;
+function makePin(color, label) {
+  const fid = 'pf'+(_pid++);
+  const enc = label ? label.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/'/g,'&#39;') : '';
+  return L.divIcon({
+    className:'',
+    html:`<div style="position:relative;width:60px;height:80px;">
+      <div style="position:absolute;left:30px;top:14px;">
+        <div style="position:absolute;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;border:1px solid ${color};animation:ring-out 2.4s ease-out infinite;"></div>
+        <div style="position:absolute;transform:translate(-50%,-50%);width:24px;height:24px;border-radius:50%;border:1px solid ${color};animation:ring-out 2.4s ease-out infinite .9s;"></div>
+      </div>
+      <svg width="28" height="42" viewBox="0 0 28 42" style="position:absolute;left:16px;top:0;" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <filter id="${fid}"><feGaussianBlur stdDeviation="3" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+          <linearGradient id="pg${fid}" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity=".3"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity=".05"/>
+          </linearGradient>
+        </defs>
+        <path d="M14 0C6.3 0 0 6.3 0 14c0 9.8 14 28 14 28S28 23.8 28 14C28 6.3 21.7 0 14 0z"
+              fill="url(#pg${fid})" stroke="${color}" stroke-width="1" filter="url(#${fid})"/>
+        <circle cx="14" cy="14" r="5" fill="${color}" style="filter:drop-shadow(0 0 8px ${color})"/>
+        <circle cx="14" cy="14" r="2" fill="rgba(255,255,255,.85)"/>
+      </svg>
+      ${enc?`<div style="position:absolute;top:46px;left:50%;transform:translateX(-50%);
+        white-space:nowrap;color:${color};font-size:9px;letter-spacing:1.5px;
+        font-family:'Share Tech Mono',monospace;background:rgba(0,5,16,.92);
+        padding:2px 8px;border-radius:1px;border:1px solid ${color}22;
+        text-shadow:0 0 10px ${color};max-width:140px;overflow:hidden;text-overflow:ellipsis;
+      ">${enc}</div>`:''}
+    </div>`,
+    iconSize:[60,80], iconAnchor:[30,42], popupAnchor:[0,-44],
+  });
+}
+
+function addMarker(lat,lng,color,label) {
+  const m = L.marker([lat,lng],{icon:makePin(color,label)}).addTo(map);
+  if(label) m.bindPopup(`<span style="color:${color};letter-spacing:1.5px">${label}</span>`);
+  return m;
+}
+
+/* ── helpers ─────────────────────────────────────────────────────── */
+function row(k,v) {
+  return `<div class="row"><span class="rk">${k}</span><span class="rv" title="${v}">${v}</span></div>`;
+}
+function countUp(el,n,suf='',ms=1100) {
+  const t = parseFloat(n); if(isNaN(t)){el.textContent=n+suf;return;}
+  const t0=performance.now();
+  (function s(now){const p=Math.min((now-t0)/ms,1),e=1-Math.pow(1-p,3);
+    el.textContent=(t*e).toFixed(1)+suf; if(p<1)requestAnimationFrame(s);})(t0);
+}
+function typeIn(el,text,ms=45) {
+  el.textContent='';let i=0;const t=setInterval(()=>{el.textContent+=text[i++];if(i>=text.length)clearInterval(t);},ms);
+}
+function formatDur(mins) {
+  const m=Math.round(parseFloat(mins));
+  if(isNaN(m)||m<=0)return'—';
+  if(m<60)return`${m} min`;
+  const h=Math.floor(m/60),r=m%60;
+  return r?`${h} hr ${r} min`:`${h} hr`;
+}
+
+/* ── weather ─────────────────────────────────────────────────────── */
+function wxLabel(c){
+  if(c===0)return'◉ CLEAR SKY';
+  if(c<=3)return'◑ CLOUDY';
+  if(c<=48)return'≋ FOG';
+  if(c<=57)return'▾ DRIZZLE';
+  if(c<=67)return'▼ RAIN';
+  if(c<=77)return'❈ SNOW';
+  if(c<=82)return'▼ SHOWERS';
+  if(c<=86)return'❈ SNOW SHOWER';
+  return'⚡ STORM';
+}
+async function fetchWeather(lat,lng,containerEl){
+  const old=document.getElementById('wx-card');
+  if(old)old.remove();
+  if(window._ltiv){clearInterval(window._ltiv);window._ltiv=null;}
+  try{
+    const res=await fetch(
+      `https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lng.toFixed(4)}&current_weather=true&timezone=auto&forecast_days=1`
+    );
+    const d=await res.json();
+    const w=d.current_weather;
+    const dirs=['N','NE','E','SE','S','SW','W','NW'];
+    const wd=dirs[Math.round(w.winddirection/45)%8];
+    const tz=d.timezone||'UTC';
+    const tzAbbr=d.timezone_abbreviation||'UTC';
+    function localTime(){
+      try{
+        return new Intl.DateTimeFormat('en-GB',{
+          timeZone:tz,hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+        }).format(new Date());
+      }catch(_){return '--:--:--';}
+    }
+    const el=document.createElement('div');
+    el.id='wx-card'; el.className='card'; el.style.animationDelay='.35s';
+    el.innerHTML=`<h3>Weather &amp; Time</h3>
+      <div class="wx-temp">${w.temperature}°C</div>
+      <div class="wx-cond">${wxLabel(w.weathercode)}</div>
+      ${row('Wind',w.windspeed+' km/h '+wd)}
+      ${row('Local Time','<span id="lt-val">'+localTime()+'</span>')}
+      ${row('Timezone',tzAbbr)}`;
+    containerEl.appendChild(el);
+    window._ltiv=setInterval(()=>{
+      const v=document.getElementById('lt-val');
+      if(v)v.textContent=localTime();
+    },1000);
+  }catch(_){}
+}
+
+/* ── particle flow ───────────────────────────────────────────────── */
+function addParticles(geometry){
+  const raw=geometry.type==='LineString'
+    ?geometry.coordinates
+    :geometry.coordinates.flat();
+  if(raw.length<2)return;
+  const lls=raw.map(c=>L.latLng(c[1],c[0]));
+  const pcv=document.getElementById('particles');
+  const N=7;
+  const pts=Array.from({length:N},(_,i)=>({t:i/N,spd:.00055+Math.random()*.00035}));
+  function getLL(t){
+    const n=lls.length-1;
+    const i=Math.min(Math.floor(t*n),n-1);
+    const f=t*n-i;
+    const a=lls[i],b=lls[Math.min(i+1,n)];
+    return L.latLng(a.lat+(b.lat-a.lat)*f,a.lng+(b.lng-a.lng)*f);
+  }
+  function draw(){
+    const mw=document.getElementById('mw');
+    const w=mw.offsetWidth,h=mw.offsetHeight;
+    if(pcv.width!==w)pcv.width=w;
+    if(pcv.height!==h)pcv.height=h;
+    const ctx=pcv.getContext('2d');
+    ctx.clearRect(0,0,w,h);
+    pts.forEach(p=>{
+      p.t=(p.t+p.spd)%1;
+      const pt=map.latLngToContainerPoint(getLL(p.t));
+      const g=ctx.createRadialGradient(pt.x,pt.y,0,pt.x,pt.y,10);
+      g.addColorStop(0,'rgba(0,255,231,.95)');
+      g.addColorStop(.4,'rgba(0,255,231,.25)');
+      g.addColorStop(1,'rgba(0,255,231,0)');
+      ctx.fillStyle=g;
+      ctx.beginPath();ctx.arc(pt.x,pt.y,10,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,.9)';
+      ctx.beginPath();ctx.arc(pt.x,pt.y,1.8,0,Math.PI*2);ctx.fill();
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+}
+
+/* ── on-map search ───────────────────────────────────────────────── */
+let _smk=null;
+async function mapSearch(q){
+  q=q.trim();if(!q)return;
+  const btn=document.getElementById('ms-btn');
+  btn.textContent='◌'; btn.style.opacity='.5';
+  try{
+    const res=await fetch(
+      `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+      {headers:{'User-Agent':'JarvisV1/1.0'}}
+    );
+    const data=await res.json();
+    if(!data.length){btn.textContent='⌕';btn.style.opacity='1';return;}
+    const r=data[0];
+    const lat=+r.lat,lng=+r.lon;
+    const short=r.display_name.split(',')[0];
+    const region=r.display_name.split(',').slice(1,3).join(',').trim()||'—';
+
+    if(_smk)map.removeLayer(_smk);
+    _smk=addMarker(lat,lng,'#9b3dff',short).openPopup();
+    map.flyTo([lat,lng],13,{duration:1.5});
+    radarPing(lat,lng,'#9b3dff',5000);
+    typeIn(document.getElementById('hdr-path'),short.toUpperCase());
+
+    // fully refresh sidebar for the new location
+    const sbc=document.getElementById('sb-c');
+    sbc.innerHTML=`
+      <div class="sg">
+        <div class="sb"><span class="sv" style="font-size:13px">${lat.toFixed(4)}</span><span class="sl2">LATITUDE</span></div>
+        <div class="sb"><span class="sv" style="font-size:13px">${lng.toFixed(4)}</span><span class="sl2">LONGITUDE</span></div>
+      </div>
+      <div class="card"><h3>Location Data</h3>
+        ${row('Name',short)}
+        ${row('Region',region)}
+        ${row('Coords',lat.toFixed(5)+', '+lng.toFixed(5))}
+      </div>`;
+    fetchWeather(lat,lng,sbc);
+  }catch(_){}
+  btn.textContent='⌕';btn.style.opacity='1';
+}
+document.getElementById('ms-btn').addEventListener('click',()=>
+  mapSearch(document.getElementById('ms-input').value));
+document.getElementById('ms-input').addEventListener('keydown',e=>{
+  if(e.key==='Enter')mapSearch(e.target.value);
+});
+
+/* ── animated route ──────────────────────────────────────────────── */
+function addRoute(geometry) {
+  // glow base
+  L.geoJSON({type:'Feature',geometry},{style:{color:'#00ffe7',weight:18,opacity:.04}}).addTo(map);
+  L.geoJSON({type:'Feature',geometry},{style:{color:'#1a8fff',weight:6,opacity:.15}}).addTo(map);
+
+  // main line — draws itself
+  const main = L.geoJSON({type:'Feature',geometry},{
+    style:{color:'#00ffe7',weight:2,opacity:.95}
+  }).addTo(map);
+  setTimeout(()=>{
+    main.eachLayer(l=>{
+      const p=l._path; if(!p) return;
+      try{const len=p.getTotalLength();
+        p.style.strokeDasharray=len; p.style.strokeDashoffset=len;
+        p.getBoundingClientRect();
+        p.style.transition='stroke-dashoffset 2.6s cubic-bezier(.4,0,.2,1)';
+        p.style.strokeDashoffset='0';}catch(_){}
+    });
+  },120);
+
+  // flowing dots layer
+  const flow = L.geoJSON({type:'Feature',geometry},{
+    style:{color:'#00ffe7',weight:2.5,opacity:.5,dashArray:'6 18',dashOffset:'0'}
+  }).addTo(map);
+  let off=0;
+  setInterval(()=>{ off=(off-1)%24; flow.setStyle({dashOffset:String(off)}); },55);
+
+  // canvas particle flow on top
+  addParticles(geometry);
+}
+
+/* ── radar ping ──────────────────────────────────────────────────── */
+function radarPing(lat,lng,color,maxR=4000) {
+  let r=100,op=.7;
+  const c=L.circle([lat,lng],{radius:r,color,weight:1,fillOpacity:0,opacity:op}).addTo(map);
+  const iv=setInterval(()=>{
+    r+=maxR/35; op-=.7/35;
+    c.setRadius(r); c.setStyle({opacity:Math.max(0,op)});
+    if(r>=maxR){r=100;op=.7;c.setRadius(r);c.setStyle({opacity:op});}
+  },45);
+  return {stop:()=>{clearInterval(iv);map.removeLayer(c);}};
+}
+
+/* ══ DIRECTIONS ═════════════════════════════════════════════════ */
+if (action==='directions') {
+  document.getElementById('badge').textContent='NAVIGATION';
+  typeIn(document.getElementById('hdr-path'),'ROUTE PLANNER');
+
+  const olat=+params.get('olat'), olng=+params.get('olng');
+  const dlat=+params.get('dlat'), dlng=+params.get('dlng');
+  const oname=params.get('oname')||'Origin';
+  const dname=params.get('dname')||'Destination';
+  const dist=params.get('distance')||'0';
+  const dur=params.get('duration')||'0';
+  const rid=params.get('route_id')||'';
+
+  addMarker(olat,olng,'#00ffe7',oname.split(',')[0]).openPopup();
+  addMarker(dlat,dlng,'#ff0055',dname.split(',')[0]);
+  map.fitBounds([[olat,olng],[dlat,dlng]],{padding:[120,100]});
+  radarPing(olat,olng,'#00ffe7',8000);
+
+  const rc=document.getElementById('rc'); rc.style.display='block';
+  countUp(document.getElementById('rc-d'),dist,' km');
+  document.getElementById('rc-t').innerHTML=`<span class="bdot"></span>${formatDur(dur)}`;
+
+  const sbcd=document.getElementById('sb-c');
+  sbcd.innerHTML=`
+    <div class="sg">
+      <div class="sb"><span class="sv" id="sdist">—</span><span class="sl2">KILOMETRES</span></div>
+      <div class="sb"><span class="sv" id="sdur" style="font-size:14px">${formatDur(dur)}</span><span class="sl2">TRAVEL TIME</span></div>
+    </div>
+    <div class="card"><h3>Route Info</h3>
+      ${row('Origin',oname.split(',')[0])}
+      ${row('Dest',dname.split(',')[0])}
+    </div>
+    <div id="sw"></div>`;
+  countUp(document.getElementById('sdist'),dist,'');
+  fetchWeather(dlat,dlng,sbcd);
+
+  if(rid) {
+    fetch(`/api/map/data/${rid}`).then(r=>r.json()).then(data=>{
+      if(data.geometry) addRoute(data.geometry);
+      if(data.steps?.length) {
+        let h=`<div class="card" style="animation-delay:.1s"><h3>Turn by Turn</h3>`;
+        data.steps.forEach((s,i)=>{h+=`<div class="step-row"><span class="sn">${i+1}</span><span>${s}</span></div>`;});
+        document.getElementById('sw').innerHTML=h+'</div>';
+      }
+    }).catch(()=>{});
+  }
+}
+
+/* ══ LOCATION ═══════════════════════════════════════════════════ */
+else if(action==='location'){
+  document.getElementById('badge').textContent='LOCATION';
+  const lat=+params.get('lat'), lng=+params.get('lng');
+  const name=params.get('name')||'Location';
+  const short=name.split(',')[0];
+  const region=name.split(',').slice(1,3).join(',').trim()||'—';
+
+  typeIn(document.getElementById('hdr-path'),short.toUpperCase());
+  map.setView([lat,lng],13);
+  addMarker(lat,lng,'#00ffe7',short).openPopup();
+  radarPing(lat,lng,'#00ffe7',5000);
+
+  const sbc=document.getElementById('sb-c');
+  sbc.innerHTML=`
+    <div class="sg">
+      <div class="sb"><span class="sv" style="font-size:13px">${lat.toFixed(4)}</span><span class="sl2">LATITUDE</span></div>
+      <div class="sb"><span class="sv" style="font-size:13px">${lng.toFixed(4)}</span><span class="sl2">LONGITUDE</span></div>
+    </div>
+    <div class="card"><h3>Location Data</h3>
+      ${row('Name',short)}
+      ${row('Region',region)}
+      ${row('Coords',lat.toFixed(5)+', '+lng.toFixed(5))}
+    </div>`;
+  fetchWeather(lat,lng,sbc);
+}
+
+/* ══ NEARBY ═════════════════════════════════════════════════════ */
+else if(action==='search'){
+  document.getElementById('badge').textContent='AREA SCAN';
+  const query=params.get('query')||'';
+  const near=params.get('near')||'';
+  const clat=+params.get('clat'), clng=+params.get('clng');
+  const places=JSON.parse(params.get('places')||'[]');
+
+  typeIn(document.getElementById('hdr-path'),`${query.toUpperCase()} / ${near.toUpperCase()}`);
+  map.setView([clat,clng],13);
+  addMarker(clat,clng,'#00ffe7',near);
+  radarPing(clat,clng,'#00ffe7',6000);
+
+  const bounds=L.latLngBounds([[clat,clng]]);
+  let html=`<div class="card"><h3>${places.length} Targets — ${query}</h3></div>`;
+  places.forEach((p,i)=>{
+    addMarker(p.lat,p.lng,'#ff0055',p.name).openPopup();
+    bounds.extend([p.lat,p.lng]);
+    html+=`<div class="poi" style="animation-delay:${i*.06}s" onclick="map.flyTo([${p.lat},${p.lng}],16)">
+      <div class="pi">TARGET ${String(i+1).padStart(2,'0')}</div>
+      <div class="pn">${p.name}</div>
+      <div class="pa">${p.address}</div>
+    </div>`;
+  });
+  map.fitBounds(bounds,{padding:[70,70],maxZoom:14});
+  document.getElementById('sb-c').innerHTML=html;
+}
+</script>
+</body>
+</html>

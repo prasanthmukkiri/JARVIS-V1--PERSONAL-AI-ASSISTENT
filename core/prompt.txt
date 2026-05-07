@@ -16,6 +16,7 @@ computer_settings: ALL single OS actions (volume, brightness, wifi, close, short
 agent_task: ONLY for complex, multi-step planning (3+ steps).
 browser_control: ALL web/browser tasks — searching, opening sites, clicking, filling forms.
 open_app: ONLY for launching desktop applications (Spotify, Discord, VS Code, etc.) NOT browsers.
+maps: ALL map/location/navigation requests — "show X on map", "directions from A to B", "where is X", "find X near Y", "how far is X from Y". NEVER use browser_control for these.
 Language: Respond in user's language; extract parameters in English.
 
 BROWSER RULES (CRITICAL):

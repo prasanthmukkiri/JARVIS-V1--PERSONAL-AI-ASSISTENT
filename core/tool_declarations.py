@@ -424,6 +424,45 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "maps",
+        "description": (
+            "Shows interactive maps, directions, and nearby places. "
+            "Use for: 'show me X on the map', 'directions from A to B', "
+            "'find cafes near X', 'where is X', 'how far is X from Y'. "
+            "Opens a dark-themed interactive map in the browser. Free, no API key needed."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action": {
+                    "type": "STRING",
+                    "description": "show_location | directions | search_nearby"
+                },
+                "location": {
+                    "type": "STRING",
+                    "description": "Place name to show (show_location action)"
+                },
+                "origin": {
+                    "type": "STRING",
+                    "description": "Starting point (directions action)"
+                },
+                "destination": {
+                    "type": "STRING",
+                    "description": "Ending point (directions action)"
+                },
+                "query": {
+                    "type": "STRING",
+                    "description": "What to search for, e.g. 'restaurants', 'hospitals' (search_nearby action)"
+                },
+                "near": {
+                    "type": "STRING",
+                    "description": "Location to search near, e.g. 'Hyderabad' (search_nearby action)"
+                },
+            },
+            "required": ["action"]
+        }
+    },
+    {
         "name": "log_mood_voice",
         "description": (
             "Silently log the emotional tone you detect in the user's VOICE — "

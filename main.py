@@ -64,6 +64,8 @@ from actions.game_updater      import game_updater
 
 
 NEWS_DASHBOARD_URL = "http://127.0.0.1:5555/news"
+BRAIN_DASHBOARD_URL = "http://127.0.0.1:5555/brain"
+MAP_DASHBOARD_URL = "http://127.0.0.1:5555/map"
 
 from core.turn_manager import save_episode_bg as _save_episode_bg
 from core.turn_manager import kg_turn_bg as _kg_turn_bg
@@ -139,10 +141,67 @@ def _parse_direct_message_command(text: str) -> dict | None:
 
 
 def _is_news_request(text: str) -> bool:
+    # Only treat a request as an "open news" command when the user speaks
+    # one of the explicit phrases. This avoids accidental navigation when
+    # the user mentions the word "news" in normal conversation.
+    if not text:
+        return False
+    s = text.lower()
+    # remove punctuation (e.g. what's -> whats) and normalize whitespace
+    s = re.sub(r"[^\w\s]", "", s)
+    s = re.sub(r"\s+", " ", s).strip()
+
+    allowed = {
+        "whats the current news",
+        "what is the current news",
+        "open news",
+        "whats happening around the world",
+        "what is happening around the world",
+        "whats happening around the world",
+    }
+
+    return s in allowed
+
+
+def _is_brain_request(text: str) -> bool:
     normalized = re.sub(r"\s+", " ", (text or "")).strip().lower()
     if not normalized:
         return False
-    return bool(re.search(r"\b(current\s+news|latest\s+news|today'?s\s+news|news)\b", normalized))
+    return bool(re.search(r"\b(open\s+your\s+brain|open\s+brain|your\s+brain|brain)\b", normalized))
+
+
+def _parse_map_request(text: str) -> tuple[bool, str]:
+    """Parse map request and extract location if provided.
+    Returns (is_map_request, location_or_empty).
+    E.g. 'open map for paris' -> (True, 'paris')
+    E.g. 'show me london on map' -> (True, 'london')
+    E.g. 'open maps' -> (True, '')
+    """
+    normalized = re.sub(r"\s+", " ", (text or "")).strip().lower()
+    if not normalized:
+        return False, ""
+    
+    # Check if it's a map request
+    if not re.search(r"\b(open|show)\s+(map|maps|the\s+map)\b", normalized):
+        return False, ""
+    
+    # Try to extract location using various patterns
+    patterns = [
+        r"(?:open|show)\s+(?:map|maps|the\s+map)\s+(?:for|of|to)\s+(.+?)(?:\s+(?:on\s+)?map)?$",  # "open map for paris"
+        r"(?:open|show)\s+(.+?)\s+(?:on|in)\s+(?:map|maps)$",  # "show paris on map"
+        r"show\s+me\s+(.+?)\s+(?:on|in)\s+(?:the\s+)?map$",  # "show me london on map"
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, normalized)
+        if match:
+            location = match.group(1).strip()
+            # Clean up common words
+            location = re.sub(r"\b(the|in|on)\b", "", location).strip()
+            return True, location
+    
+    # Just a plain "open map" with no location
+    return True, ""
 
 
 def _open_news_dashboard(player: JarvisUI, loop: asyncio.AbstractEventLoop):
@@ -150,6 +209,26 @@ def _open_news_dashboard(player: JarvisUI, loop: asyncio.AbstractEventLoop):
         None,
         lambda: browser_control(
             parameters={"action": "go_to", "url": NEWS_DASHBOARD_URL, "browser": "chrome"},
+            player=player,
+        ),
+    )
+
+
+def _open_brain_dashboard(player: JarvisUI, loop: asyncio.AbstractEventLoop):
+    return loop.run_in_executor(
+        None,
+        lambda: browser_control(
+            parameters={"action": "go_to", "url": BRAIN_DASHBOARD_URL, "browser": "chrome"},
+            player=player,
+        ),
+    )
+
+
+def _open_map_dashboard(player: JarvisUI, loop: asyncio.AbstractEventLoop):
+    return loop.run_in_executor(
+        None,
+        lambda: browser_control(
+            parameters={"action": "go_to", "url": MAP_DASHBOARD_URL, "browser": "chrome"},
             player=player,
         ),
     )
@@ -286,6 +365,44 @@ class JarvisLive:
                     self._add_log(f"[NEWS] {result}", "INFO")
 
             asyncio.run_coroutine_threadsafe(_run_news_dashboard(), self._loop)
+            return
+
+        if _is_brain_request(text):
+            async def _run_brain_dashboard() -> None:
+                result = await _open_brain_dashboard(self.ui, self._loop)
+                logger.info(f"BRAIN_DASHBOARD: {result}")
+                if self._add_log:
+                    self._add_log(f"[BRAIN] {result}", "INFO")
+
+            asyncio.run_coroutine_threadsafe(_run_brain_dashboard(), self._loop)
+            return
+
+        is_map_req, location = _parse_map_request(text)
+        if is_map_req:
+            async def _run_map_dashboard() -> None:
+                try:
+                    from actions.maps import maps_action
+                    if location:
+                        # If a location was specified, use show_location to geocode and open
+                        result = await self._loop.run_in_executor(
+                            None,
+                            lambda: maps_action(
+                                parameters={"action": "show_location", "location": location},
+                                player=self.ui
+                            )
+                        )
+                    else:
+                        # No location, just open the base map
+                        result = await _open_map_dashboard(self.ui, self._loop)
+                    logger.info(f"MAP_DASHBOARD: {result}")
+                    if self._add_log:
+                        self._add_log(f"[MAP] {result}", "INFO")
+                except Exception as e:
+                    logger.error(f"MAP_DASHBOARD error: {e}")
+                    if self._add_log:
+                        self._add_log(f"[MAP] Error: {e}", "ERROR")
+
+            asyncio.run_coroutine_threadsafe(_run_map_dashboard(), self._loop)
             return
 
         direct_message = _parse_direct_message_command(text)
@@ -682,6 +799,11 @@ class JarvisLive:
             elif name == "news_dashboard":
                 r = await _open_news_dashboard(self.ui, loop)
                 result = r or "Opened news dashboard."
+
+            elif name == "maps":
+                from actions.maps import maps_action
+                r = await loop.run_in_executor(None, lambda: maps_action(parameters=args, player=self.ui))
+                result = r or "Map opened."
 
             elif name == "file_controller":
                 r = await loop.run_in_executor(None, lambda: file_controller(parameters=args, player=self.ui))

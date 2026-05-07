@@ -209,6 +209,48 @@ def news_dashboard():
     return render_template("news.html")
 
 
+@app.route("/map")
+def map_page():
+    """Serve the interactive Leaflet/OSM map page."""
+    return render_template("map.html")
+
+
+@app.route("/brain")
+def brain_page():
+    """Serve the dashboard and auto-open the knowledge graph modal."""
+    return render_template("dashboard.html")
+
+
+# ── Map route cache (avoids URL-length limits for large GeoJSON) ──────────────
+import uuid as _uuid
+
+_map_cache: dict = {}
+_map_cache_lock = threading.Lock()
+
+
+@app.route("/api/map/store", methods=["POST"])
+def store_map_data():
+    """Cache route geometry + steps; return a short ID for the map page to fetch."""
+    data = request.get_json(force=True) or {}
+    rid = _uuid.uuid4().hex[:10]
+    with _map_cache_lock:
+        _map_cache[rid] = data
+        if len(_map_cache) > 30:
+            oldest = next(iter(_map_cache))
+            del _map_cache[oldest]
+    return jsonify({"id": rid})
+
+
+@app.route("/api/map/data/<rid>", methods=["GET"])
+def get_map_data(rid: str):
+    """Return cached map data by ID."""
+    with _map_cache_lock:
+        data = _map_cache.get(rid)
+    if data is None:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(data)
+
+
 def _parse_news_feed(feed_url: str, limit: int = 8) -> list[dict]:
     """Fetch and parse a Google News RSS feed."""
     response = requests.get(feed_url, timeout=8, headers={"User-Agent": "Mozilla/5.0"})

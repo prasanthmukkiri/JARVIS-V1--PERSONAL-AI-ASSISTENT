@@ -24,6 +24,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Load initial data
     refreshData();
     loadSettings();
+
+    const brainMode = window.location.pathname === '/brain' || new URLSearchParams(window.location.search).get('open_kg') === '1';
+    if (brainMode) {
+        setTimeout(() => {
+            if (typeof openKGModal === 'function') {
+                openKGModal();
+            }
+        }, 350);
+    }
     
     // Start polling
     setInterval(refreshStatus, UPDATE_INTERVAL);

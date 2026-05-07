@@ -99,7 +99,7 @@ All memory files use **atomic writes** (temp file + `os.replace()`) — zero dat
 
 | Category | Tools |
 |----------|-------|
-| Web | `web_search`, `browser_control`, `flight_finder` |
+| Web | `web_search`, `browser_control`, `flight_finder`, `maps` |
 | Media | `youtube_video`, `weather_report` |
 | Desktop | `open_app`, `desktop_control`, `computer_control`, `computer_settings` |
 | Files | `file_controller`, `screen_process` |
@@ -117,6 +117,27 @@ Available at `http://127.0.0.1:5555` while Jarvis is running. Localhost-only (ac
 - **News dashboard** — Google News RSS for South India, North India, International, Tech, Conflicts with YouTube news videos
 - **Semantic search panel** — search all memories and episodes by meaning
 - **Knowledge Graph panel** — browse entities and relationships, click a node to see its edges
+- **Map dashboard** — interactive navigation system with directions, location search, and nearby place discovery
+
+### Interactive Maps
+**New feature:** Jarvis can now open, navigate, and search maps using voice commands.
+
+#### Voice Commands
+- **"open map"** — opens the base map (centered on India)
+- **"open map for Paris"** — geocodes location and centers map on it
+- **"show me London on map"** — alternative syntax for location search
+- **"directions from Delhi to Mumbai"** — calculates route, distance, time, and turn-by-turn directions
+- **"search restaurants near New York"** — nearby search with markers and details
+
+#### Map Features
+- **Interactive Leaflet map** — dark-themed with multiple tile layers (satellite, terrain, dark)
+- **Live search bar** — on-map search without leaving the page
+- **Directions engine** — powered by free OSRM (routing), Nominatim (geocoding)
+- **Tab reuse** — all map commands use the same browser tab (no new windows)
+- **Animated routes** — flowing particles along directions, turn-by-turn instructions
+- **Weather overlay** — location-based weather on every map view
+- **Coordinate tracking** — live lat/lng display as you hover
+- **Nearby markers** — color-coded pins for search results
 
 ### Security
 - **Windows Credential Manager** — API key stored securely via `keyring`; `api_keys.json` is only used as a first-run fallback and auto-migrated
@@ -169,6 +190,7 @@ Jarvis-V1/
 │   ├── file_controller.py
 │   ├── flight_finder.py
 │   ├── game_updater.py
+│   ├── maps.py                    # Interactive maps + directions + nearby search
 │   ├── open_app.py
 │   ├── reminder.py
 │   ├── screen_processor.py
@@ -181,7 +203,8 @@ Jarvis-V1/
 │   ├── app.py                     # Flask dashboard server
 │   ├── templates/
 │   │   ├── dashboard.html         # Main dashboard
-│   │   └── news.html              # News dashboard
+│   │   ├── news.html              # News dashboard
+│   │   └── map.html               # Interactive map dashboard
 │   └── static/
 │       ├── app.js                 # Dashboard JS (semantic search, KG panel)
 │       ├── style.css

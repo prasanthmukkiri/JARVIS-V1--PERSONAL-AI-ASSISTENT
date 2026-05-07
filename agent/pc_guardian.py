@@ -10,7 +10,9 @@ Cooldowns prevent alert spam.
 import threading
 import time
 import logging
+import json
 from typing import Callable
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +33,11 @@ THRESHOLDS = {
 
 # ── Cooldowns (seconds between same alert type) ────────────────────────────────
 COOLDOWNS = {
-    "cpu":         300,   # 5 min
-    "ram":         600,   # 10 min
-    "disk":        1800,  # 30 min
-    "battery":     600,   # 10 min
-    "temperature": 300,   # 5 min
+    "cpu":         300,    # 5 min
+    "ram":         300,    # 5 min (lowered from 10)
+    "disk":        86400,  # 24 hours
+    "battery":     600,    # 10 min
+    "temperature": 300,    # 5 min
 }
 
 CHECK_INTERVAL = 30       # seconds between each full check
@@ -98,6 +100,11 @@ class PCGuardian:
 
         # Live snapshot (for dashboard polling)
         self.snapshot: dict = {}
+        
+        # Load persisted alert history
+        self._alert_file = Path.home() / ".jarvis_profiles" / "last_guardian_alerts.json"
+        self._load_alert_history()
+        self._save_lock = threading.Lock()
 
     def start(self) -> None:
         if not _PSUTIL:
@@ -115,10 +122,38 @@ class PCGuardian:
 
     def _can_alert(self, alert_type: str) -> bool:
         last = self._last_alert.get(alert_type, 0)
+        # If last is a string (from JSON), convert to float
+        if isinstance(last, str):
+            try:
+                last = float(last)
+            except (ValueError, TypeError):
+                last = 0
         return (time.time() - last) >= COOLDOWNS[alert_type]
 
     def _record_alert(self, alert_type: str) -> None:
         self._last_alert[alert_type] = time.time()
+        self._save_alert_history()
+    
+    def _load_alert_history(self) -> None:
+        """Load alert history from disk to persist across restarts."""
+        try:
+            if self._alert_file.exists():
+                with open(self._alert_file, 'r', encoding='utf-8') as f:
+                    self._last_alert = json.load(f)
+                logger.debug(f"[Guardian] Loaded alert history: {self._last_alert}")
+        except Exception as e:
+            logger.warning(f"[Guardian] Could not load alert history: {e}")
+            self._last_alert = {}
+    
+    def _save_alert_history(self) -> None:
+        """Save alert history to disk for persistence."""
+        try:
+            with self._save_lock:
+                self._alert_file.parent.mkdir(parents=True, exist_ok=True)
+                with open(self._alert_file, 'w', encoding='utf-8') as f:
+                    json.dump(self._last_alert, f)
+        except Exception as e:
+            logger.debug(f"[Guardian] Could not save alert history: {e}")
 
     def _loop(self) -> None:
         # Give Jarvis time to fully start before first check
