@@ -1,8 +1,8 @@
-# JARVIS MK37 — Personal AI Assistant for Windows
+# Jarvis V1 — Personal AI Assistant for Windows
 
 **Created and owned by Prasanth Mukkiri.**
 
-JARVIS MK37 is a production-grade personal AI assistant powered by the **Google Gemini Live API**. It listens to your voice in real time, understands natural language, remembers everything about you across sessions, monitors your PC health, and executes complex multi-step tasks on your Windows desktop — all through a single spoken command.
+Jarvis V1 is a production-grade personal AI assistant powered by the **Google Gemini Live API**. It listens to your voice in real time, understands natural language, remembers everything about you across sessions, monitors your PC health, and executes complex multi-step tasks on your Windows desktop — all through a single spoken command.
 
 ![Version](https://img.shields.io/badge/version-V1-blue)
 ![Platform](https://img.shields.io/badge/platform-Windows-important)
@@ -14,7 +14,7 @@ JARVIS MK37 is a production-grade personal AI assistant powered by the **Google 
 
 ## What Makes This V1
 
-JARVIS MK37 is not a chatbot with a microphone attached. It has a full cognitive architecture:
+Jarvis V1 is not a chatbot with a microphone attached. It has a full cognitive architecture:
 
 - **Talks back in real time** via Gemini Live bidirectional audio
 - **Remembers who you are** across every session using layered memory
@@ -130,7 +130,7 @@ Available at `http://127.0.0.1:5555` while Jarvis is running. Localhost-only (ac
 ## Architecture
 
 ```
-Jarvis-MK37/
+Jarvis-V1/
 ├── main.py                        # Entry point, JarvisLive class, audio pipeline
 ├── ui.py                          # Tkinter UI — halo animation, log, mute button
 ├── wake_word.py                   # Wake-word detector (active/sleep toggling)
@@ -221,7 +221,7 @@ Jarvis-MK37/
 1. **Clone the repository:**
    ```bash
    git clone https://github.com/prasanthmukkiri/JARVIS--PERSONAL-AI-ASSISTENT.git
-   cd Jarvis-MK37
+   cd Jarvis-V1
    ```
 
 2. **Create and activate a virtual environment:**
@@ -339,7 +339,7 @@ python -m pytest tests/test_integration.py -v
 
 ## Author
 
-**Prasanth Mukkiri** — sole creator, owner, and developer of JARVIS MK37.
+**Prasanth Mukkiri** — sole creator, owner, and developer of Jarvis V1.
 
 ---
 

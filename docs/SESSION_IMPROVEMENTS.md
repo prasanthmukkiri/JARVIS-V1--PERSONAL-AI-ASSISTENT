@@ -1,8 +1,8 @@
-# Jarvis-MK37 Phase 0 Foundation — Completed Improvements
+# Jarvis V1 Phase 0 Foundation — Completed Improvements
 
 ## Session Summary
 
-This session delivered **five major foundation improvements** to Jarvis-MK37, bringing the agent closer to production-readiness. Below is a detailed breakdown of each improvement.
+This session delivered **five major foundation improvements** to Jarvis V1, bringing the agent closer to production-readiness. Below is a detailed breakdown of each improvement.
 
 ---
 
@@ -198,4 +198,4 @@ This session delivered **five major foundation improvements** to Jarvis-MK37, br
 **Status:** ✅ Foundation complete, ready for Phase 1 robustness improvements.
 
 Generated: 2026-05-01
-Session: Jarvis-MK37 Foundation Build
+Session: Jarvis V1 Foundation Build

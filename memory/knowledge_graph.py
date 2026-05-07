@@ -41,7 +41,7 @@ _NAME_PATTERNS = {
     "boss": {"type": "person"},
     "jarvis": {"type": "org"},
     "jarvis v1": {"type": "project"},
-    "jarvis mk37": {"type": "project"},
+    "jarvis v1": {"type": "project"},
     "punjab": {"type": "place"},
     "jalandhar": {"type": "place"},
     "nellore": {"type": "place"},
@@ -134,7 +134,7 @@ def _local_extract_entities(text: str) -> list:
                 if "nellore" in text_lc:     rels.append(("nellore", "from"))
                 if "andhra pradesh" in text_lc: rels.append(("andhra pradesh", "from"))
                 if "jarvis v1" in text_lc:   rels.append(("jarvis v1", "working on"))
-                if "jarvis mk37" in text_lc: rels.append(("jarvis mk37", "working on"))
+                if "jarvis v1" in text_lc: rels.append(("jarvis v1", "working on"))
             elif name == "jarvis":
                 if "prashanth" in text_lc:      rels.append(("prashanth", "created by"))
                 if "april 10" in text_lc:       rels.append(("april 10", "born on"))

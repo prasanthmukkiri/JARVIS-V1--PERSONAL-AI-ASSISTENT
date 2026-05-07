@@ -18,7 +18,7 @@
 
 ```bash
 git clone https://github.com/prasanthmukkiri/JARVIS--PERSONAL-AI-ASSISTENT.git
-cd Jarvis-MK37
+cd Jarvis-V1
 ```
 
 ### 2. Create a Virtual Environment

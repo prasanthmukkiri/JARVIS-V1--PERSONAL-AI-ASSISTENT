@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Pre-commit Hook for Jarvis-MK37
+Pre-commit Hook for Jarvis V1
 ================================
 Runs linting, formatting, and tests before allowing commits.
 

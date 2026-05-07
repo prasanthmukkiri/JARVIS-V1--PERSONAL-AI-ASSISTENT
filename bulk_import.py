@@ -76,8 +76,8 @@ def bulk_import_memory():
         "value": "Personal AI assistant for Windows with voice control, automation, and memory systems",
         "updated": datetime.now().strftime("%Y-%m-%d")
     }
-    memory["projects"]["jarvis_mk37"] = {
-        "value": "Current version: Jarvis MK37 with knowledge graph, semantic search, and mood tracking",
+    memory["projects"]["jarvis_v1_features"] = {
+        "value": "Jarvis V1 — knowledge graph, semantic search, mood tracking, PC guardian, proactive briefing",
         "updated": datetime.now().strftime("%Y-%m-%d")
     }
     
@@ -113,7 +113,7 @@ def bulk_import_knowledge_graph():
         "Prashanth is the user of Jarvis. He was born on March 3, 2005. His preferred name is 'boss' and Jarvis should call him that.",
         "Prashanth is from Nellore district in Andhra Pradesh but is currently studying and living in Punjab.",
         "Prashanth is currently working on Jarvis V1, a personal AI assistant for Windows. The project focuses on voice control, automation, and intelligent memory systems.",
-        "Jarvis is the AI assistant born on April 10. It was created by Prashanth as a personal project called Jarvis MK37.",
+        "Jarvis is the AI assistant born on April 10. It was created by Prasanth Mukkiri as a personal project called Jarvis V1.",
         "Jarvis has multiple memory systems: long-term memory for facts, conversation history for episodes, semantic search for context retrieval, and a knowledge graph for entity relationships.",
         "Recent work on Jarvis includes implementing knowledge graphs, fixing the dashboard UI, adding semantic search, and ensuring all systems work together seamlessly.",
         "Jarvis can automate tasks, control applications, search the web, send messages, track mood, and proactively brief the user.",
@@ -174,7 +174,7 @@ def main():
         print("\n📍 Data Loaded:")
         print("  ✅ Personal Identity: Name, DOB, Location, Origin")
         print("  ✅ Preferences: Call you 'boss', communication style")
-        print("  ✅ Projects: Jarvis V1 and MK37 details")
+        print("  ✅ Projects: Jarvis V1 details")
         print("  ✅ Relationships: Jarvis AI info")
         print("  ✅ Knowledge Graph: 8 episodes with entity extraction")
         print("  ✅ Conversation History: 3 conversation summaries")
