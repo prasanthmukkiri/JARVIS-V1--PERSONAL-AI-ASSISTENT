@@ -7,10 +7,14 @@ import traceback
 import socket
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 # ── Logging setup ─────────────────────────────────────────────────────────────
+_BASE = Path(sys.executable).parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+_LOG_DIR = _BASE / "logs"
+_LOG_DIR.mkdir(parents=True, exist_ok=True)
 logging.basicConfig(
-    filename="jarvis_log.txt",
+    filename=str(_LOG_DIR / "jarvis.log"),
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
     encoding="utf-8",
@@ -32,6 +36,14 @@ from ui import JarvisUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
 )
+from memory.conversation_history import (
+    load_recent_episodes, format_episodes_for_prompt,
+    summarize_conversation, save_episode,
+)
+from memory.mood_tracker import (
+    analyze_text_mood, parse_camera_mood, log_mood,
+    get_pattern, format_mood_for_prompt,
+)
 
 from actions.flight_finder     import flight_finder
 from actions.open_app          import open_app
@@ -52,6 +64,10 @@ from actions.game_updater      import game_updater
 
 
 NEWS_DASHBOARD_URL = "http://127.0.0.1:5555/news"
+
+from core.turn_manager import save_episode_bg as _save_episode_bg
+from core.turn_manager import kg_turn_bg as _kg_turn_bg
+from core.turn_manager import detect_followup_bg as _detect_followup_bg
 
 
 def get_base_dir():
@@ -139,18 +155,26 @@ def _open_news_dashboard(player: JarvisUI, loop: asyncio.AbstractEventLoop):
     )
 
 
+_api_key_cache: str | None = None
+
+
 def _get_api_key() -> str:
     """
-    Loads the Gemini API key securely.
+    Loads the Gemini API key securely — cached after first load.
     Priority: Windows Credential Manager → api_keys.json (legacy fallback)
     On first run with a JSON key, automatically migrates it to Credential Manager.
     """
+    global _api_key_cache
+    if _api_key_cache:
+        return _api_key_cache
+
     # 1. Try Windows Credential Manager first (most secure)
     try:
         import keyring
         key = keyring.get_password("JarvisAI", "gemini_api_key")
         if key:
-            return key
+            _api_key_cache = key
+            return _api_key_cache
     except Exception:
         pass  # keyring not available — fall through to JSON
 
@@ -163,12 +187,11 @@ def _get_api_key() -> str:
             try:
                 import keyring
                 keyring.set_password("JarvisAI", "gemini_api_key", key)
-                print("[Security] ✅ API key migrated to Windows Credential Manager.")
-                print("[Security]    Your api_keys.json can now be deleted for safety.")
+                logger.info("API key migrated to Windows Credential Manager")
             except Exception as e:
-                print(f"[Security] ⚠️  Could not migrate to Credential Manager: {e}")
-                print("[Security]    Install keyring: pip install keyring")
-            return key
+                logger.warning("Could not migrate to Credential Manager: %s", e)
+            _api_key_cache = key
+            return _api_key_cache
     except FileNotFoundError:
         raise RuntimeError(
             "No API key found!\n"
@@ -201,385 +224,7 @@ def _clean_transcript(text: str) -> str:
     return text.strip()
 
 
-# ── Tool declarations ──────────────────────────────────────────────────────────
-TOOL_DECLARATIONS = [
-    {
-        "name": "open_app",
-        "description": (
-            "Opens any application on the computer. "
-            "Use this whenever the user asks to open, launch, or start any app, "
-            "website, or program. Always call this tool — never just say you opened it."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "app_name": {
-                    "type": "STRING",
-                    "description": "Exact name of the application (e.g. 'WhatsApp', 'Chrome', 'Spotify')"
-                }
-            },
-            "required": ["app_name"]
-        }
-    },
-    {
-        "name": "web_search",
-        "description": "Searches the web for any information.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "query":  {"type": "STRING", "description": "Search query"},
-                "mode":   {"type": "STRING", "description": "search (default) or compare"},
-                "items":  {"type": "ARRAY", "items": {"type": "STRING"}, "description": "Items to compare"},
-                "aspect": {"type": "STRING", "description": "price | specs | reviews"}
-            },
-            "required": ["query"]
-        }
-    },
-    {
-        "name": "weather_report",
-        "description": "Gives the weather report to user",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "city": {"type": "STRING", "description": "City name"}
-            },
-            "required": ["city"]
-        }
-    },
-    {
-        "name": "send_message",
-        "description": (
-            "Sends a text message via WhatsApp, Telegram, or other messaging platform. "
-            "Preserve the receiver contact name exactly as the user said it; do not translate or transliterate names."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "receiver":     {"type": "STRING", "description": "Recipient contact name exactly as provided by the user; never translate or transliterate it"},
-                "message_text": {"type": "STRING", "description": "The message to send"},
-                "platform":     {"type": "STRING", "description": "Platform: WhatsApp, Telegram, etc."}
-            },
-            "required": ["receiver", "message_text", "platform"]
-        }
-    },
-    {
-        "name": "reminder",
-        "description": "Sets a timed reminder using Task Scheduler.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "date":    {"type": "STRING", "description": "Date in YYYY-MM-DD format"},
-                "time":    {"type": "STRING", "description": "Time in HH:MM format (24h)"},
-                "message": {"type": "STRING", "description": "Reminder message text"}
-            },
-            "required": ["date", "time", "message"]
-        }
-    },
-    {
-        "name": "youtube_video",
-        "description": (
-            "Controls YouTube. Use for: playing videos, summarizing a video's content, "
-            "getting video info, or showing trending videos."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action": {"type": "STRING", "description": "play | summarize | get_info | trending (default: play)"},
-                "query":  {"type": "STRING", "description": "Search query for play action"},
-                "save":   {"type": "BOOLEAN", "description": "Save summary to Notepad (summarize only)"},
-                "region": {"type": "STRING", "description": "Country code for trending e.g. TR, US"},
-                "url":    {"type": "STRING", "description": "Video URL for get_info action"},
-            },
-            "required": []
-        }
-    },
-    {
-        "name": "screen_process",
-        "description": (
-            "Captures and analyzes the screen or webcam image. "
-            "MUST be called when user asks what is on screen, what you see, "
-            "analyze my screen, look at camera, etc. "
-            "You have NO visual ability without this tool. "
-            "After calling this tool, stay SILENT — the vision module speaks directly."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "angle": {"type": "STRING", "description": "'screen' to capture display, 'camera' for webcam. Default: 'screen'"},
-                "text":  {"type": "STRING", "description": "The question or instruction about the captured image"}
-            },
-            "required": ["text"]
-        }
-    },
-    {
-        "name": "computer_settings",
-        "description": (
-            "Controls the computer: volume, brightness, window management, keyboard shortcuts, "
-            "typing text on screen, closing apps, fullscreen, dark mode, WiFi, restart, shutdown, "
-            "scrolling, tab management, zoom, screenshots, lock screen, refresh/reload page. "
-            "Use for ANY single computer control command. NEVER route to agent_task."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action":      {"type": "STRING", "description": "The action to perform"},
-                "description": {"type": "STRING", "description": "Natural language description of what to do"},
-                "value":       {"type": "STRING", "description": "Optional value: volume level, text to type, etc."}
-            },
-            "required": []
-        }
-    },
-    {
-        "name": "browser_control",
-        "description": (
-            "Controls any web browser. Use for: opening websites, searching the web, "
-            "clicking elements, filling forms, scrolling, screenshots, navigation, any web-based task. "
-            "Always pass the 'browser' parameter when the user specifies a browser (e.g. 'open in Edge', "
-            "'use Firefox', 'open Chrome'). Multiple browsers can run simultaneously."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action":      {"type": "STRING", "description": "go_to | search | click | type | scroll | fill_form | smart_click | smart_type | get_text | get_url | press | new_tab | close_tab | screenshot | back | forward | reload | switch | list_browsers | close | close_all"},
-                "browser":     {"type": "STRING", "description": "Target browser: chrome | edge | firefox | opera | operagx | brave | vivaldi | safari. Omit to use the currently active browser."},
-                "url":         {"type": "STRING", "description": "URL for go_to / new_tab action"},
-                "query":       {"type": "STRING", "description": "Search query for search action"},
-                "engine":      {"type": "STRING", "description": "Search engine: google | bing | duckduckgo | yandex (default: google)"},
-                "selector":    {"type": "STRING", "description": "CSS selector for click/type"},
-                "text":        {"type": "STRING", "description": "Text to click or type"},
-                "description": {"type": "STRING", "description": "Element description for smart_click/smart_type"},
-                "direction":   {"type": "STRING", "description": "up | down for scroll"},
-                "amount":      {"type": "INTEGER", "description": "Scroll amount in pixels (default: 500)"},
-                "key":         {"type": "STRING", "description": "Key name for press action (e.g. Enter, Escape, F5)"},
-                "path":        {"type": "STRING", "description": "Save path for screenshot"},
-                "incognito":   {"type": "BOOLEAN", "description": "Open in private/incognito mode"},
-                "clear_first": {"type": "BOOLEAN", "description": "Clear field before typing (default: true)"},
-            },
-            "required": ["action"]
-        }
-    },
-    {
-        "name": "news_dashboard",
-        "description": "Opens the Jarvis news dashboard with India, South India, and international headlines from the last 2 days.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {},
-            "required": []
-        }
-    },
-    {
-        "name": "file_controller",
-        "description": "Manages files and folders: list, create, delete, move, copy, rename, read, write, find, disk usage.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action":      {"type": "STRING", "description": "list | create_file | create_folder | delete | move | copy | rename | read | write | find | largest | disk_usage | organize_desktop | info"},
-                "path":        {"type": "STRING", "description": "File/folder path or shortcut: desktop, downloads, documents, home"},
-                "destination": {"type": "STRING", "description": "Destination path for move/copy"},
-                "new_name":    {"type": "STRING", "description": "New name for rename"},
-                "content":     {"type": "STRING", "description": "Content for create_file/write"},
-                "name":        {"type": "STRING", "description": "File name to search for"},
-                "extension":   {"type": "STRING", "description": "File extension to search (e.g. .pdf)"},
-                "count":       {"type": "INTEGER", "description": "Number of results for largest"},
-            },
-            "required": ["action"]
-        }
-    },
-    {
-        "name": "desktop_control",
-        "description": "Controls the desktop: wallpaper, organize, clean, list, stats.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action": {"type": "STRING", "description": "wallpaper | wallpaper_url | organize | clean | list | stats | task"},
-                "path":   {"type": "STRING", "description": "Image path for wallpaper"},
-                "url":    {"type": "STRING", "description": "Image URL for wallpaper_url"},
-                "mode":   {"type": "STRING", "description": "by_type or by_date for organize"},
-                "task":   {"type": "STRING", "description": "Natural language desktop task"},
-            },
-            "required": ["action"]
-        }
-    },
-    {
-        "name": "code_helper",
-        "description": "Writes, edits, explains, runs, or builds code files.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action":      {"type": "STRING", "description": "write | edit | explain | run | build | auto (default: auto)"},
-                "description": {"type": "STRING", "description": "What the code should do or what change to make"},
-                "language":    {"type": "STRING", "description": "Programming language (default: python)"},
-                "output_path": {"type": "STRING", "description": "Where to save the file"},
-                "file_path":   {"type": "STRING", "description": "Path to existing file for edit/explain/run/build"},
-                "code":        {"type": "STRING", "description": "Raw code string for explain"},
-                "args":        {"type": "STRING", "description": "CLI arguments for run/build"},
-                "timeout":     {"type": "INTEGER", "description": "Execution timeout in seconds (default: 30)"},
-            },
-            "required": ["action"]
-        }
-    },
-    {
-        "name": "dev_agent",
-        "description": "Builds complete multi-file projects from scratch: plans, writes files, installs deps, opens VSCode, runs and fixes errors.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "description":  {"type": "STRING", "description": "What the project should do"},
-                "language":     {"type": "STRING", "description": "Programming language (default: python)"},
-                "project_name": {"type": "STRING", "description": "Optional project folder name"},
-                "timeout":      {"type": "INTEGER", "description": "Run timeout in seconds (default: 30)"},
-            },
-            "required": ["description"]
-        }
-    },
-    {
-        "name": "agent_task",
-        "description": (
-            "Executes complex multi-step tasks requiring multiple different tools. "
-            "Examples: 'research X and save to file', 'find and organize files'. "
-            "DO NOT use for single commands. NEVER use for Steam/Epic — use game_updater."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "goal":     {"type": "STRING", "description": "Complete description of what to accomplish"},
-                "priority": {"type": "STRING", "description": "low | normal | high (default: normal)"}
-            },
-            "required": ["goal"]
-        }
-    },
-    {
-        "name": "computer_control",
-        "description": "Direct computer control: type, click, hotkeys, scroll, move mouse, screenshots, find elements on screen.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action":      {"type": "STRING", "description": "type | smart_type | click | double_click | right_click | hotkey | press | scroll | move | copy | paste | screenshot | wait | clear_field | focus_window | screen_find | screen_click | random_data | user_data"},
-                "text":        {"type": "STRING", "description": "Text to type or paste"},
-                "x":           {"type": "INTEGER", "description": "X coordinate"},
-                "y":           {"type": "INTEGER", "description": "Y coordinate"},
-                "keys":        {"type": "STRING", "description": "Key combination e.g. 'ctrl+c'"},
-                "key":         {"type": "STRING", "description": "Single key e.g. 'enter'"},
-                "direction":   {"type": "STRING", "description": "up | down | left | right"},
-                "amount":      {"type": "INTEGER", "description": "Scroll amount (default: 3)"},
-                "seconds":     {"type": "NUMBER",  "description": "Seconds to wait"},
-                "title":       {"type": "STRING",  "description": "Window title for focus_window"},
-                "description": {"type": "STRING",  "description": "Element description for screen_find/screen_click"},
-                "type":        {"type": "STRING",  "description": "Data type for random_data"},
-                "field":       {"type": "STRING",  "description": "Field for user_data: name|email|city"},
-                "clear_first": {"type": "BOOLEAN", "description": "Clear field before typing (default: true)"},
-                "path":        {"type": "STRING",  "description": "Save path for screenshot"},
-            },
-            "required": ["action"]
-        }
-    },
-    {
-        "name": "game_updater",
-        "description": (
-            "THE ONLY tool for ANY Steam or Epic Games request. "
-            "Use for: installing, downloading, updating games, listing installed games, "
-            "checking download status, scheduling updates. "
-            "ALWAYS call directly for any Steam/Epic/game request. "
-            "NEVER use agent_task, browser_control, or web_search for Steam/Epic."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "action":    {"type": "STRING",  "description": "update | install | list | download_status | schedule | cancel_schedule | schedule_status (default: update)"},
-                "platform":  {"type": "STRING",  "description": "steam | epic | both (default: both)"},
-                "game_name": {"type": "STRING",  "description": "Game name (partial match supported)"},
-                "app_id":    {"type": "STRING",  "description": "Steam AppID for install (optional)"},
-                "hour":      {"type": "INTEGER", "description": "Hour for scheduled update 0-23 (default: 3)"},
-                "minute":    {"type": "INTEGER", "description": "Minute for scheduled update 0-59 (default: 0)"},
-                "shutdown_when_done": {"type": "BOOLEAN", "description": "Shut down PC when download finishes"},
-            },
-            "required": []
-        }
-    },
-    {
-        "name": "flight_finder",
-        "description": "Searches Google Flights and speaks the best options.",
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "origin":      {"type": "STRING",  "description": "Departure city or airport code"},
-                "destination": {"type": "STRING",  "description": "Arrival city or airport code"},
-                "date":        {"type": "STRING",  "description": "Departure date (any format)"},
-                "return_date": {"type": "STRING",  "description": "Return date for round trips"},
-                "passengers":  {"type": "INTEGER", "description": "Number of passengers (default: 1)"},
-                "cabin":       {"type": "STRING",  "description": "economy | premium | business | first"},
-                "save":        {"type": "BOOLEAN", "description": "Save results to Notepad"},
-            },
-            "required": ["origin", "destination", "date"]
-        }
-    },
-    {
-        "name": "forget_memory",
-        "description": (
-            "Delete a specific memory the user wants forgotten. "
-            "Call when user says 'forget that', 'remove that', 'stop remembering X', "
-            "'delete my preference for X'. Do NOT call for normal commands. "
-            "Call silently — do NOT announce you are forgetting."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "category": {
-                    "type": "STRING",
-                    "description": "identity | preferences | projects | relationships | wishes | notes"
-                },
-                "key": {
-                    "type": "STRING",
-                    "description": "The exact snake_case key to delete (e.g. favorite_food, browser_preference)"
-                },
-            },
-            "required": ["category", "key"]
-        }
-    },
-    {
-        "name": "shutdown_jarvis",
-        "description": (
-            "Shuts down the assistant completely. "
-            "Call this when the user expresses intent to end the conversation, "
-            "close the assistant, say goodbye, or stop Jarvis. "
-            "The user can say this in ANY language."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {},
-        }
-    },
-    {
-        "name": "save_memory",
-        "description": (
-            "Save an important personal fact about the user to long-term memory. "
-            "Call this silently whenever the user reveals something worth remembering: "
-            "name, age, city, job, preferences, hobbies, relationships, projects, or future plans. "
-            "Do NOT call for: weather, reminders, searches, or one-time commands. "
-            "Do NOT announce that you are saving — just call it silently. "
-            "Values must be in English regardless of the conversation language."
-        ),
-        "parameters": {
-            "type": "OBJECT",
-            "properties": {
-                "category": {
-                    "type": "STRING",
-                    "description": (
-                        "identity — name, age, birthday, city, job, language, nationality | "
-                        "preferences — favorite food/color/music/film/game/sport, hobbies | "
-                        "projects — active projects, goals, things being built | "
-                        "relationships — friends, family, partner, colleagues | "
-                        "wishes — future plans, things to buy, travel dreams | "
-                        "notes — habits, schedule, anything else worth remembering"
-                    )
-                },
-                "key":   {"type": "STRING", "description": "Short snake_case key (e.g. name, favorite_food, sister_name)"},
-                "value": {"type": "STRING", "description": "Concise value in English (e.g. Fatih, pizza, older sister)"},
-            },
-            "required": ["category", "key", "value"]
-        }
-    },
-]
+from core.tool_declarations import TOOL_DECLARATIONS
 
 
 def _is_online() -> bool:
@@ -607,6 +252,27 @@ class JarvisLive:
         self._metrics = get_metrics()
         self._recovery = get_recovery_manager()
         self._started_at = time.time()
+        self._conversation_buffer: list[tuple[str, str]] = []
+        self._turn_count = 0
+        self._briefing_done = False
+        self._last_user_text: str = ""
+        self._user_text_lock = threading.Lock()
+        self._pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="JarvisWorker")
+
+        # mtime-based cache for _build_config() — {path_str: (mtime, formatted_str)}
+        self._config_cache: dict[str, tuple[float, str]] = {}
+
+        # Start background file indexing (Desktop, Documents, Downloads)
+        def _index_files_bg():
+            try:
+                from memory.file_store import scan_default_folders
+                def _progress(done, total):
+                    self.ui.write_log(f"SYS: Indexing... ({done}/{total} files scanned)")
+                scan_default_folders(_get_api_key(), progress_callback=_progress)
+                self.ui.write_log("SYS: File indexing complete.")
+            except Exception as e:
+                logger.error("FileStore startup index error: %s", e)
+        threading.Thread(target=_index_files_bg, daemon=True, name="FileIndex").start()
 
     def _on_text_command(self, text: str):
         if not self._loop:
@@ -639,6 +305,23 @@ class JarvisLive:
                     self._add_log(f"[DIRECT] {result}", "INFO")
 
             asyncio.run_coroutine_threadsafe(_run_direct_message(), self._loop)
+            return
+
+        # Explicit multi-step chain: "do X then Y then Z" from the dashboard text box
+        if re.search(r'\bthen\b', text, re.IGNORECASE):
+            def _run_text_chain():
+                try:
+                    from agent.chain_runner import parse_chain_goal, run_chain, make_chain_run
+                    raw_steps = parse_chain_goal(text)
+                    chain_run = make_chain_run(text, raw_steps)
+                    if self._add_log:
+                        self._add_log(f"[CHAIN] {chain_run.id} — {len(chain_run.steps)} steps", "INFO")
+                    run_chain(chain_run, speak=self.speak)
+                    if self._add_log:
+                        self._add_log(f"[CHAIN] {chain_run.id} {chain_run.status.upper()}", "INFO")
+                except Exception as exc:
+                    logger.error(f"[Chain] text chain failed: {exc}")
+            self._pool.submit(_run_text_chain)
             return
 
         if not self.session:
@@ -679,12 +362,28 @@ class JarvisLive:
         self.ui.write_log(f"ERR: {tool_name} — {short}")
         self.speak(f"Sir, {tool_name} encountered an error. {short}")
 
+    def _cached_read(self, path: Path, loader) -> str:
+        """Return cached formatted string for `path`, re-reading only if mtime changed."""
+        key = str(path)
+        try:
+            mtime = path.stat().st_mtime if path.exists() else 0.0
+        except Exception:
+            mtime = 0.0
+        cached = self._config_cache.get(key)
+        if cached and cached[0] == mtime:
+            return cached[1]
+        result = loader()
+        self._config_cache[key] = (mtime, result)
+        return result
+
     def _build_config(self) -> types.LiveConnectConfig:
         from datetime import datetime
 
-        memory     = load_memory()
-        mem_str    = format_memory_for_prompt(memory)
-        sys_prompt = _load_system_prompt()
+        mem_path    = BASE_DIR / "memory" / "long_term.json"
+        mood_path   = BASE_DIR / "memory" / "mood_log.json"
+
+        mem_str    = self._cached_read(mem_path,   lambda: format_memory_for_prompt(load_memory()))
+        sys_prompt = self._cached_read(PROMPT_PATH, _load_system_prompt)
 
         now      = datetime.now()
         time_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
@@ -720,9 +419,64 @@ class JarvisLive:
         except Exception as e:
             logger.debug(f"Emotion context unavailable: {e}")
 
+        mood_str = self._cached_read(
+            mood_path,
+            lambda: format_mood_for_prompt(get_pattern(days=7))
+        )
+
+        # Snapshot last user text once under lock — used for all context lookups below
+        with self._user_text_lock:
+            _last_user = self._last_user_text
+
+        # Semantic episode retrieval — fall back to recent if store is empty
+        episodes_str = ""
+        try:
+            from memory.semantic_store import search, format_results_for_prompt
+            if _last_user:
+                hits = search(_last_user, _get_api_key(), top_k=5)
+                if hits:
+                    episodes_str = format_results_for_prompt(hits)
+        except Exception:
+            pass
+        if not episodes_str:
+            episodes = load_recent_episodes(7)
+            episodes_str = format_episodes_for_prompt(episodes)
+
+        # Knowledge graph injection — if last user message mentions a known entity
+        kg_str = ""
+        try:
+            from memory.knowledge_graph import get_known_entities, format_kg_for_prompt
+            if _last_user:
+                known = get_known_entities()
+                lc = _last_user.lower()
+                for entity in known:
+                    if entity in lc:
+                        kg_str = format_kg_for_prompt(entity)
+                        break
+        except Exception:
+            pass
+
+        # File RAG — inject relevant file excerpts if user query matches
+        file_ctx = ""
+        try:
+            from memory.file_store import search_files as _sf, format_for_prompt as _ffp
+            if _last_user and len(_last_user) > 10:
+                file_hits = _sf(_last_user, _get_api_key(), top_k=3)
+                file_ctx  = _ffp(file_hits, min_score=0.65)
+        except Exception:
+            pass
+
         parts = [time_ctx]
         if emotion_ctx:
             parts.append(emotion_ctx)
+        if mood_str:
+            parts.append(mood_str)
+        if kg_str:
+            parts.append(kg_str)
+        if episodes_str:
+            parts.append(episodes_str)
+        if file_ctx:
+            parts.append(file_ctx)
         if mem_str:
             parts.append(mem_str)
         parts.append(sys_prompt)
@@ -745,24 +499,46 @@ class JarvisLive:
 
     async def _execute_tool(self, fc) -> types.FunctionResponse:
         name = fc.name
-        args = dict(fc.args or {})
+        raw_args = fc.args or {}
+        args = {}
+        for k, v in raw_args.items():
+            if isinstance(v, str) and len(v) > 2000:
+                logger.warning("TOOL %s: arg '%s' truncated from %d chars", name, k, len(v))
+                args[k] = v[:2000]
+            else:
+                args[k] = v
         started_at = time.perf_counter()
         success = True
 
-        print(f"[JARVIS] 🔧 {name}  {args}")
-        logger.info(f"TOOL: {name} | ARGS: {args}")
+        logger.info("TOOL: %s | ARGS: %s", name, args)
         if self._add_log:
             self._add_log(f"[TOOL] Executing {name}...", "INFO")
         self.ui.set_state("THINKING")
 
-        # ── save_memory: sessiz ve hızlı ──────────────────────────────────────
+        # ── save_memory: silent and fast ──────────────────────────────────────
         if name == "save_memory":
             category = args.get("category", "notes")
             key      = args.get("key", "")
             value    = args.get("value", "")
             if key and value:
                 update_memory({category: {key: {"value": value}}})
-                print(f"[Memory] 💾 save_memory: {category}/{key} = {value}")
+                logger.debug("save_memory: %s/%s", category, key)
+                # Embed memory entry for semantic search in background
+                def _embed_mem(cat=category, k=key, v=value):
+                    try:
+                        from memory.semantic_store import add_entry
+                        from datetime import datetime as _dt
+                        add_entry(
+                            text=f"{cat} — {k}: {v}",
+                            source="memory",
+                            source_id=f"mem_{cat}_{k}",
+                            date=_dt.now().strftime("%Y-%m-%d"),
+                            api_key=_get_api_key(),
+                            category=cat,
+                        )
+                    except Exception as e:
+                        logger.error("SemanticStore mem embed error: %s", e)
+                self._pool.submit(_embed_mem)
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
             self._metrics.record_tool_execution(name, (time.perf_counter() - started_at) * 1000.0, success=True)
@@ -779,8 +555,88 @@ class JarvisLive:
             key      = args.get("key", "")
             if key:
                 result_msg = _forget(key, category)
-                print(f"[Memory] 🗑️  forget_memory: {result_msg}")
-                logger.info(f"FORGET: {category}/{key}")
+                logger.info("FORGET: %s/%s — %s", category, key, result_msg)
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            self._metrics.record_tool_execution(name, (time.perf_counter() - started_at) * 1000.0, success=True)
+            self._recovery.record_success(name)
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": "ok", "silent": True}
+            )
+
+        # ── search_memory: semantic recall on demand ──────────────────────────
+        if name == "search_memory":
+            query = args.get("query", "").strip()
+            top_k = min(int(args.get("top_k", 5)), 10)
+            result_text = "No relevant memories found."
+            if query:
+                try:
+                    from memory.semantic_store import search
+                    hits = search(query, _get_api_key(), top_k=top_k)
+                    if hits:
+                        lines = [f"Found {len(hits)} relevant memory entries:"]
+                        for h in hits:
+                            lines.append(f"- [{h.get('date','')} {h.get('source','')}] {h.get('text','')}")
+                        result_text = "\n".join(lines)
+                    # Also check knowledge graph
+                    from memory.knowledge_graph import query_entity
+                    kg = query_entity(query, fuzzy=True)
+                    if kg:
+                        name_key, node_data = next(iter(kg["node"].items()))
+                        kg_lines = [f"KG: '{name_key}' ({node_data.get('type','?')}, {node_data.get('mentions',1)} mentions)"]
+                        for edge in kg["edges"][:5]:
+                            kg_lines.append(f"  {edge['from']} -[{edge['relation']}]-> {edge['to']}")
+                        result_text += "\n" + "\n".join(kg_lines)
+                except Exception as e:
+                    result_text = f"Memory search error: {e}"
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            self._metrics.record_tool_execution(name, (time.perf_counter() - started_at) * 1000.0, success=True)
+            self._recovery.record_success(name)
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": result_text}
+            )
+
+        # ── search_files: RAG over local PC files ────────────────────────────
+        if name == "search_files":
+            query  = args.get("query", "").strip()
+            top_k  = min(int(args.get("top_k", 4)), 8)
+            result_text = "No relevant files found. The file index may be empty — files are indexed from Desktop, Documents and Downloads."
+            if query:
+                try:
+                    from memory.file_store import search_files as _sf
+                    hits = _sf(query, _get_api_key(), top_k=top_k)
+                    if hits:
+                        lines = [f"Found {len(hits)} relevant file(s) for '{query}':"]
+                        for h in hits:
+                            score = int(h.get("score", 0) * 100)
+                            name_ = h.get("file_name", "unknown")
+                            text  = h.get("text", "").strip()[:400]
+                            chunk = h.get("chunk_idx", 0)
+                            total = h.get("total_chunks", 1)
+                            lines.append(f"\n📄 {name_} (chunk {chunk+1}/{total}, {score}% match):\n{text}")
+                        result_text = "\n".join(lines)
+                except Exception as e:
+                    result_text = f"File search error: {e}"
+            if not self.ui.muted:
+                self.ui.set_state("LISTENING")
+            self._metrics.record_tool_execution(name, (time.perf_counter() - started_at) * 1000.0, success=True)
+            self._recovery.record_success(name)
+            return types.FunctionResponse(
+                id=fc.id, name=name,
+                response={"result": result_text}
+            )
+
+        # ── log_mood_voice: silent voice-tone mood logging ────────────────────
+        if name == "log_mood_voice":
+            mood       = args.get("mood", "").strip().lower()
+            confidence = args.get("confidence", "medium")
+            valid_moods = {"happy", "stressed", "tired", "sad", "frustrated", "bored"}
+            if mood in valid_moods:
+                self._pool.submit(log_mood, mood)
+                logger.info("MOOD_VOICE: %s | confidence: %s", mood, confidence)
             if not self.ui.muted:
                 self.ui.set_state("LISTENING")
             self._metrics.record_tool_execution(name, (time.perf_counter() - started_at) * 1000.0, success=True)
@@ -847,17 +703,14 @@ class JarvisLive:
                 # Capture speak reference NOW — avoids stale session after reconnect
                 _speak_now = self.speak
                 _ui_now    = self.ui
-                threading.Thread(
-                    target=screen_process,
-                    kwargs={
-                        "parameters":    args,
-                        "response":      None,
-                        "player":        _ui_now,
-                        "session_memory": None,
-                        "speak":         _speak_now,
-                    },
-                    daemon=True
-                ).start()
+                self._pool.submit(
+                    screen_process,
+                    parameters=args,
+                    response=None,
+                    player=_ui_now,
+                    session_memory=None,
+                    speak=_speak_now,
+                )
                 result = "Vision module activated. Stay completely silent — vision module will speak directly."
 
             elif name == "computer_settings":
@@ -915,13 +768,13 @@ class JarvisLive:
             result = f"Tool '{name}' failed: {e}"
             success = False
             traceback.print_exc()
+            self.ui.write_log(f"ERR: {name} failed — {str(e)[:80]}")
             self.speak_error(name, e)
 
         if not self.ui.muted:
             self.ui.set_state("LISTENING")
 
-        print(f"[JARVIS] 📤 {name} → {str(result)[:80]}")
-        logger.info(f"RESULT: {name} → {str(result)[:200]}")
+        logger.info("RESULT: %s → %s", name, str(result)[:200])
         duration_ms = (time.perf_counter() - started_at) * 1000.0
         self._metrics.record_tool_execution(name, duration_ms, success=success)
         if success:
@@ -941,7 +794,7 @@ class JarvisLive:
             await self.session.send_realtime_input(media=msg)
 
     async def _listen_audio(self):
-        print("[JARVIS] 🎤 Mic started")
+        logger.info("Mic started")
         loop = asyncio.get_event_loop()
 
         def callback(indata, frames, time_info, status):
@@ -955,7 +808,7 @@ class JarvisLive:
                         {"data": data, "mime_type": "audio/pcm"}
                     )
                 except Exception:
-                    pass  # drop chunk if queue is full (backpressure)
+                    logger.debug("Audio chunk dropped (queue full — backpressure)")
 
         try:
             with sd.InputStream(
@@ -965,20 +818,30 @@ class JarvisLive:
                 blocksize=CHUNK_SIZE,
                 callback=callback,
             ):
-                print("[JARVIS] 🎤 Mic stream open")
+                logger.info("Mic stream open")
                 while True:
                     await asyncio.sleep(0.1)
         except Exception as e:
-            print(f"[JARVIS] ❌ Mic: {e}")
+            logger.error("Mic error: %s", e)
             raise
 
     async def _receive_audio(self):
-        print("[JARVIS] 👂 Recv started")
+        logger.info("Recv started")
         out_buf, in_buf = [], []
 
         try:
             while True:
-                async for response in self.session.receive():
+                _recv_iter = self.session.receive().__aiter__()
+                while True:
+                    try:
+                        response = await asyncio.wait_for(
+                            _recv_iter.__anext__(), timeout=60.0
+                        )
+                    except asyncio.TimeoutError:
+                        logger.warning("Stream silent for 60s — reconnecting")
+                        raise RuntimeError("Receive stream timeout")
+                    except StopAsyncIteration:
+                        break
 
                     if response.data:
                         if self._turn_done_event and self._turn_done_event.is_set():
@@ -1004,17 +867,28 @@ class JarvisLive:
 
                             full_in = " ".join(in_buf).strip()
                             if full_in:
+                                with self._user_text_lock:
+                                    self._last_user_text = full_in
                                 self.ui.write_log(f"You: {full_in}")
                                 if self._add_log:
                                     self._add_log(f"You: {full_in}", "USER")
-                                # Detect emotion from transcript and add to context
                                 try:
                                     emotion = detect_emotion(full_in)
                                     if emotion and emotion not in ("neutral", "unknown", ""):
                                         self.ui.write_log(f"[Emotion] {emotion}")
                                         logger.info(f"EMOTION: {emotion} | text: {full_in[:80]}")
+                                        # Log camera mood to tracker
+                                        cam_mood = parse_camera_mood(emotion)
+                                        if cam_mood:
+                                            self._pool.submit(log_mood, cam_mood)
                                 except Exception:
                                     pass
+                                # Log text-based mood in background
+                                txt_mood = analyze_text_mood(full_in)
+                                if txt_mood:
+                                    self._pool.submit(log_mood, txt_mood)
+                                # Detect follow-up intentions in background
+                                self._pool.submit(_detect_followup_bg, full_in, _get_api_key())
                             in_buf = []
 
                             full_out = " ".join(out_buf).strip()
@@ -1024,23 +898,50 @@ class JarvisLive:
                                     self._add_log(f"Jarvis: {full_out}", "SYSTEM")
                             out_buf = []
 
+                            # Feed every turn into the knowledge graph in real-time
+                            if full_in or full_out:
+                                self._pool.submit(_kg_turn_bg, full_in, full_out, _get_api_key())
+
+                            # Accumulate turn for episodic memory
+                            if full_in or full_out:
+                                self._conversation_buffer.append((full_in, full_out))
+                                self._turn_count += 1
+                                # Hard cap — never keep more than 20 turns in RAM
+                                if len(self._conversation_buffer) > 20:
+                                    self._conversation_buffer = self._conversation_buffer[-20:]
+                                # Auto-save episode every 5 turns in background
+                                if self._turn_count % 5 == 0:
+                                    buf_snapshot = list(self._conversation_buffer)
+                                    # Clear buffer after snapshot so RAM is freed
+                                    self._conversation_buffer.clear()
+                                    self._pool.submit(_save_episode_bg, buf_snapshot, _get_api_key())
+
                     if response.tool_call:
                         fn_responses = []
                         for fc in response.tool_call.function_calls:
-                            print(f"[JARVIS] 📞 {fc.name}")
-                            fr = await self._execute_tool(fc)
+                            logger.debug("Tool call: %s", fc.name)
+                            try:
+                                fr = await asyncio.wait_for(
+                                    self._execute_tool(fc), timeout=90.0
+                                )
+                            except asyncio.TimeoutError:
+                                logger.warning("Tool timeout: %s", fc.name)
+                                fr = types.FunctionResponse(
+                                    id=fc.id,
+                                    name=fc.name,
+                                    response={"error": f"Tool '{fc.name}' timed out after 90s — try again"},
+                                )
                             fn_responses.append(fr)
                         await self.session.send_tool_response(
                             function_responses=fn_responses
                         )
 
         except Exception as e:
-            print(f"[JARVIS] ❌ Recv: {e}")
-            traceback.print_exc()
+            logger.error("Recv error: %s", e, exc_info=True)
             raise
 
     async def _play_audio(self):
-        print("[JARVIS] 🔊 Play started")
+        logger.info("Play started")
 
         stream = sd.RawOutputStream(
             samplerate=RECEIVE_SAMPLE_RATE,
@@ -1071,12 +972,30 @@ class JarvisLive:
                 await asyncio.to_thread(stream.write, chunk)
 
         except Exception as e:
-            print(f"[JARVIS] ❌ Play: {e}")
+            logger.error("Play error: %s", e)
             raise
         finally:
             self.set_speaking(False)
             stream.stop()
             stream.close()
+
+    async def _deliver_briefing(self):
+        """Wait for the session to stabilise, then speak a proactive greeting."""
+        await asyncio.sleep(3)  # let audio pipeline settle
+        try:
+            from agent.proactive import build_briefing
+            from memory.conversation_history import load_recent_episodes
+            memory   = load_memory()
+            episodes = load_recent_episodes(5)
+            api_key  = _get_api_key()
+            text = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: build_briefing(memory, episodes, api_key)
+            )
+            if text:
+                logger.info("Proactive briefing: %s...", text[:80])
+                self.speak(text)
+        except Exception as e:
+            logger.error("Proactive delivery error: %s", e)
 
     async def run(self):
         client = genai.Client(
@@ -1084,9 +1003,10 @@ class JarvisLive:
             http_options={"api_version": "v1beta"}
         )
 
+        _reconnect_attempt = 0
         while True:
             try:
-                print("[JARVIS] 🔌 Connecting...")
+                logger.info("Connecting...")
                 self.ui.set_state("THINKING")
                 config = self._build_config()
 
@@ -1099,8 +1019,9 @@ class JarvisLive:
                     self.audio_in_queue = asyncio.Queue()
                     self.out_queue      = asyncio.Queue(maxsize=10)
                     self._turn_done_event = asyncio.Event()
+                    _reconnect_attempt  = 0  # reset on successful connection
 
-                    print("[JARVIS] ✅ Connected.")
+                    logger.info("Connected.")
                     self.ui.set_state("LISTENING")
                     if self._update_state:
                         self._update_state({"awake": True, "listening": True, "last_command": "", "uptime_seconds": int(time.time() - self._started_at)})
@@ -1113,19 +1034,37 @@ class JarvisLive:
                     tg.create_task(self._receive_audio())
                     tg.create_task(self._play_audio())
 
+                    # Proactive briefing — only once per launch, not on reconnects
+                    if not self._briefing_done:
+                        self._briefing_done = True
+                        tg.create_task(self._deliver_briefing())
+
             except Exception as e:
-                print(f"[JARVIS] ⚠️ {e}")
-                traceback.print_exc()
+                logger.warning("Session error: %s", e, exc_info=True)
 
             self.set_speaking(False)
             self.ui.set_state("THINKING")
+
+            # Save episode on disconnect if there are unsaved turns
+            if self._conversation_buffer:
+                buf_snapshot = list(self._conversation_buffer)
+                self._conversation_buffer.clear()
+                self._turn_count = 0
+                self._pool.submit(_save_episode_bg, buf_snapshot, _get_api_key())
+
+            _reconnect_attempt += 1
             if not _is_online():
-                print("[JARVIS] 📡 No internet — waiting 10s...")
+                delay = 10
+                logger.warning("No internet — waiting %ds", delay)
                 self.ui.write_log("SYS: No internet. Waiting...")
-                await asyncio.sleep(10)
             else:
-                print("[JARVIS] 🔄 Reconnecting in 3s...")
-                await asyncio.sleep(3)
+                delay = min(3 * (2 ** (_reconnect_attempt - 1)), 60)
+                logger.info("Reconnecting in %ds (attempt %d)", delay, _reconnect_attempt)
+                if _reconnect_attempt == 5:
+                    self.ui.write_log("ERR: 5 failed reconnects — check your API key")
+                elif _reconnect_attempt == 10:
+                    self.ui.write_log("ERR: 10 failed reconnects — Jarvis may need a restart")
+            await asyncio.sleep(delay)
 
 
 def main():
@@ -1136,9 +1075,9 @@ def main():
         from gui.app import start_server, add_log, update_agent_state
         gui_thread = start_server(host="127.0.0.1", port=5555, debug=False)
         ui.write_log("SYS: GUI Dashboard started at http://127.0.0.1:5555")
-        print("[Main] 🖥️  Dashboard at http://127.0.0.1:5555")
+        logger.info("Dashboard at http://127.0.0.1:5555")
     except Exception as e:
-        print(f"[Main] ⚠️  Dashboard failed to start: {e}")
+        logger.error("Dashboard failed to start: %s", e)
         add_log = None
         update_agent_state = None
  
@@ -1174,11 +1113,19 @@ def main():
  
         # ── Start JARVIS as normal ─────────────────────────────
         jarvis = JarvisLive(ui, add_log=add_log, update_state=update_agent_state)
+
+        # ── Start PC Guardian ──────────────────────────────────
+        try:
+            from agent.pc_guardian import start_guardian
+            start_guardian(speak=jarvis.speak)
+        except Exception as e:
+            logger.error("PC Guardian failed to start: %s", e)
+
         try:
             asyncio.run(jarvis.run())
         except KeyboardInterrupt:
             detector.stop()
-            print("\n🔴 Shutting down...")
+            logger.info("Shutting down...")
  
     threading.Thread(target=runner, daemon=True).start()
     ui.root.mainloop()

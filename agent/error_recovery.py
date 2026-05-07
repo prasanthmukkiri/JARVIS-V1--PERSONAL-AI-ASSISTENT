@@ -43,84 +43,85 @@ class CircuitState(Enum):
 
 
 class ToolCircuit:
-    """Circuit breaker for a single tool."""
+    """Circuit breaker for a single tool with exponential backoff."""
+
+    # Backoff ladder: 60s → 120s → 300s → 600s → 1800s (30 min max)
+    _BACKOFF = [60, 120, 300, 600, 1800]
 
     def __init__(
         self,
         tool_name: str,
         failure_threshold: int = 3,
         success_threshold: int = 2,
-        timeout_seconds: int = 60,
+        timeout_seconds: int = 60,  # kept for API compat, used as backoff[0]
     ):
-        """
-        Initialize circuit breaker.
-
-        Args:
-            tool_name: Name of the tool
-            failure_threshold: Failures before opening circuit
-            success_threshold: Successes needed to close circuit
-            timeout_seconds: Time before attempting recovery
-        """
-        self.tool_name = tool_name
+        self.tool_name        = tool_name
         self.failure_threshold = failure_threshold
         self.success_threshold = success_threshold
-        self.timeout_seconds = timeout_seconds
 
         self.state = CircuitState.CLOSED
-        self.failure_count = 0
-        self.success_count = 0
+        self.failure_count  = 0
+        self.success_count  = 0
+        self.open_count     = 0   # how many times circuit has opened — drives backoff
         self.last_failure_time: Optional[float] = None
         self.last_error_msg = ""
 
+    def _current_timeout(self) -> int:
+        """Return exponentially growing timeout based on how many times we've tripped."""
+        idx = min(self.open_count, len(self._BACKOFF) - 1)
+        return self._BACKOFF[idx]
+
     def record_success(self):
-        """Record a successful execution."""
         if self.state == CircuitState.HALF_OPEN:
             self.success_count += 1
             if self.success_count >= self.success_threshold:
-                self.state = CircuitState.CLOSED
+                self.state       = CircuitState.CLOSED
                 self.failure_count = 0
                 self.success_count = 0
+                self.open_count    = max(0, self.open_count - 1)  # decay on full recovery
         elif self.state == CircuitState.CLOSED:
             self.failure_count = max(0, self.failure_count - 1)
 
     def record_failure(self, error_msg: str = ""):
-        """Record a failed execution."""
-        self.failure_count += 1
+        self.failure_count    += 1
         self.last_failure_time = time.time()
-        self.last_error_msg = error_msg
+        self.last_error_msg    = error_msg
 
         if self.state == CircuitState.CLOSED and self.failure_count >= self.failure_threshold:
-            self.state = CircuitState.OPEN
+            self.state      = CircuitState.OPEN
+            self.open_count += 1   # escalate backoff
 
         elif self.state == CircuitState.HALF_OPEN:
-            self.state = CircuitState.OPEN
+            self.state      = CircuitState.OPEN
+            self.open_count += 1
             self.success_count = 0
 
     def is_available(self) -> bool:
-        """Check if tool can be used."""
         if self.state == CircuitState.CLOSED:
             return True
 
         if self.state == CircuitState.OPEN:
-            if self.last_failure_time and time.time() - self.last_failure_time > self.timeout_seconds:
-                self.state = CircuitState.HALF_OPEN
+            elapsed = time.time() - (self.last_failure_time or 0)
+            if elapsed > self._current_timeout():
+                self.state         = CircuitState.HALF_OPEN
                 self.failure_count = 0
                 return True
             return False
 
-        # HALF_OPEN
-        return True
+        return True  # HALF_OPEN — allow one probe
 
     def get_state(self) -> dict:
-        """Get circuit state information."""
+        timeout = self._current_timeout()
         return {
-            "tool": self.tool_name,
-            "state": self.state.value,
-            "failures": self.failure_count,
-            "successes": self.success_count,
-            "last_error": self.last_error_msg,
+            "tool":          self.tool_name,
+            "state":         self.state.value,
+            "failures":      self.failure_count,
+            "successes":     self.success_count,
+            "open_count":    self.open_count,
+            "last_error":    self.last_error_msg,
+            "timeout":       timeout,
             "recovery_time": (
-                self.last_failure_time + self.timeout_seconds - time.time()
+                max(0, self.last_failure_time + timeout - time.time())
                 if self.last_failure_time else None
             ),
         }

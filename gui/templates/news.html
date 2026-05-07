@@ -1,597 +1,242 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jarvis V1 - News Dashboard</title>
-    <style>
-        :root {
-            --bg: #050816;
-            --bg-2: #0b1220;
-            --panel: rgba(10, 17, 32, 0.82);
-            --panel-strong: rgba(13, 21, 39, 0.92);
-            --line: rgba(124, 255, 216, 0.16);
-            --line-strong: rgba(124, 255, 216, 0.35);
-            --text: #e8f2ff;
-            --muted: #8ea4c0;
-            --accent: #7cffd8;
-            --accent-2: #6aa9ff;
-            --accent-3: #ff7ad9;
-            --shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
-        }
-
-        * { box-sizing: border-box; }
-        html, body { margin: 0; min-height: 100%; }
-        body {
-            font-family: Inter, "Segoe UI", Arial, sans-serif;
-            color: var(--text);
-            background:
-                radial-gradient(circle at top left, rgba(106, 169, 255, 0.18), transparent 30%),
-                radial-gradient(circle at top right, rgba(124, 255, 216, 0.12), transparent 26%),
-                linear-gradient(160deg, var(--bg) 0%, #070b14 52%, #04060d 100%);
-            overflow-x: hidden;
-        }
-
-        body::before {
-            content: "";
-            position: fixed;
-            inset: 0;
-            pointer-events: none;
-            background-image: linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-            background-size: 48px 48px;
-            mask-image: linear-gradient(to bottom, rgba(0,0,0,0.9), transparent 85%);
-        }
-
-        .container {
-            max-width: 1500px;
-            margin: 0 auto;
-            padding: 24px;
-            position: relative;
-            z-index: 1;
-        }
-
-        .topbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            margin-bottom: 20px;
-        }
-
-        .back-btn {
-            appearance: none;
-            border: 1px solid var(--line-strong);
-            background: linear-gradient(180deg, rgba(124,255,216,0.14), rgba(124,255,216,0.05));
-            color: var(--text);
-            padding: 12px 18px;
-            border-radius: 999px;
-            cursor: pointer;
-            font-weight: 700;
-            letter-spacing: 0.02em;
-            box-shadow: var(--shadow);
-            transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
-        }
-
-        .back-btn:hover {
-            transform: translateY(-1px);
-            border-color: var(--accent);
-            background: linear-gradient(180deg, rgba(124,255,216,0.22), rgba(124,255,216,0.08));
-        }
-
-        .hero {
-            position: relative;
-            overflow: hidden;
-            border: 1px solid var(--line);
-            background: linear-gradient(135deg, rgba(13, 21, 39, 0.96), rgba(7, 12, 22, 0.86));
-            border-radius: 28px;
-            padding: 28px;
-            box-shadow: var(--shadow);
-            margin-bottom: 22px;
-        }
-
-        .hero::after {
-            content: "";
-            position: absolute;
-            inset: -40% auto auto 60%;
-            width: 320px;
-            height: 320px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(124,255,216,0.22), transparent 70%);
-            filter: blur(10px);
-            pointer-events: none;
-        }
-
-        .hero-eyebrow {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            color: var(--accent);
-            text-transform: uppercase;
-            letter-spacing: 0.2em;
-            font-size: 0.74rem;
-            margin-bottom: 14px;
-        }
-
-        .live-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: var(--accent);
-            box-shadow: 0 0 0 0 rgba(124,255,216,0.55);
-            animation: pulse 1.8s infinite;
-        }
-
-        @keyframes pulse {
-            0% { box-shadow: 0 0 0 0 rgba(124,255,216,0.6); }
-            70% { box-shadow: 0 0 0 12px rgba(124,255,216,0); }
-            100% { box-shadow: 0 0 0 0 rgba(124,255,216,0); }
-        }
-
-        .hero-grid {
-            display: grid;
-            grid-template-columns: 1.4fr 0.6fr;
-            gap: 20px;
-            align-items: end;
-        }
-
-        .hero h1 {
-            margin: 0 0 10px;
-            font-size: clamp(2rem, 5vw, 4rem);
-            line-height: 1.02;
-            letter-spacing: -0.04em;
-        }
-
-        .hero p {
-            margin: 0;
-            color: var(--muted);
-            font-size: 1rem;
-            max-width: 760px;
-        }
-
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-        }
-
-        .stat {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-radius: 18px;
-            padding: 14px 16px;
-        }
-
-        .stat small {
-            display: block;
-            color: var(--muted);
-            margin-bottom: 6px;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-            font-size: 0.72rem;
-        }
-
-        .stat strong {
-            font-size: 1rem;
-            color: var(--text);
-        }
-
-        #error-container {
-            margin-bottom: 18px;
-        }
-
-        .error {
-            background: rgba(255, 85, 110, 0.08);
-            border: 1px solid rgba(255, 85, 110, 0.35);
-            color: #ffb5c2;
-            padding: 16px 18px;
-            border-radius: 16px;
-            box-shadow: var(--shadow);
-        }
-
-        .layout {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 20px;
-        }
-
-        .section {
-            background: var(--panel);
-            border: 1px solid var(--line);
-            border-radius: 24px;
-            padding: 22px;
-            box-shadow: var(--shadow);
-            backdrop-filter: blur(16px);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .section::before {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(135deg, rgba(124,255,216,0.06), transparent 30%, transparent 70%, rgba(106,169,255,0.08));
-            pointer-events: none;
-        }
-
-        .section-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin-bottom: 18px;
-        }
-
-        .section h2 {
-            margin: 0;
-            font-size: 1.22rem;
-            letter-spacing: 0.04em;
-            color: var(--text);
-        }
-
-        .section-tag {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--accent);
-            border: 1px solid rgba(124,255,216,0.18);
-            background: rgba(124,255,216,0.06);
-            border-radius: 999px;
-            padding: 7px 12px;
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.14em;
-            white-space: nowrap;
-        }
-
-        .video-rail {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 18px;
-            margin-bottom: 20px;
-        }
-
-        .video-card {
-            background: linear-gradient(180deg, rgba(13, 21, 39, 0.98), rgba(7, 12, 22, 0.9));
-            border: 1px solid rgba(124,255,216,0.14);
-            border-radius: 22px;
-            padding: 14px;
-            box-shadow: var(--shadow);
-            overflow: hidden;
-        }
-
-        .video-card .frame {
-            position: relative;
-            border-radius: 16px;
-            overflow: hidden;
-            aspect-ratio: 16 / 9;
-            background: #02040a;
-            border: 1px solid rgba(255,255,255,0.06);
-            margin-bottom: 12px;
-        }
-
-        .video-card iframe {
-            width: 100%;
-            height: 100%;
-            border: 0;
-        }
-
-        .video-meta {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-        }
-
-        .video-meta h3 {
-            margin: 0;
-            font-size: 1rem;
-            line-height: 1.4;
-        }
-
-        .video-meta p {
-            margin: 0;
-            color: var(--muted);
-            font-size: 0.86rem;
-        }
-
-        .video-chip {
-            display: inline-flex;
-            align-items: center;
-            width: fit-content;
-            gap: 8px;
-            padding: 6px 10px;
-            border-radius: 999px;
-            border: 1px solid rgba(106,169,255,0.18);
-            background: rgba(106,169,255,0.08);
-            color: var(--accent-2);
-            font-size: 0.74rem;
-            text-transform: uppercase;
-            letter-spacing: 0.12em;
-        }
-
-        .video-loading {
-            grid-column: 1 / -1;
-            padding: 20px;
-            color: var(--muted);
-            text-align: center;
-            border: 1px dashed rgba(124,255,216,0.18);
-            border-radius: 18px;
-            background: rgba(255,255,255,0.02);
-        }
-
-        .news-item {
-            background: var(--panel-strong);
-            border: 1px solid rgba(255,255,255,0.06);
-            border-left: 3px solid var(--accent);
-            padding: 16px 16px 14px;
-            margin-bottom: 14px;
-            border-radius: 18px;
-            transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
-        }
-
-        .news-item:hover {
-            transform: translateY(-2px);
-            border-color: rgba(124,255,216,0.22);
-            background: rgba(15, 24, 43, 0.98);
-        }
-
-        .news-item h3 {
-            margin: 0 0 8px;
-            color: #f5fbff;
-            font-size: 1.04rem;
-            line-height: 1.45;
-        }
-
-        .news-item p {
-            margin: 0 0 12px;
-            color: var(--muted);
-            font-size: 0.93rem;
-            line-height: 1.55;
-        }
-
-        .news-source {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 10px;
-            font-size: 0.78rem;
-            color: var(--muted);
-        }
-
-        .news-source span {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            background: rgba(124,255,216,0.08);
-            border: 1px solid rgba(124,255,216,0.14);
-            padding: 6px 10px;
-            border-radius: 999px;
-            color: var(--accent);
-        }
-
-        .news-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 10px;
-            color: var(--accent-2);
-            text-decoration: none;
-            font-size: 0.86rem;
-        }
-
-        .news-link:hover { color: var(--accent-3); }
-
-        .loading {
-            color: var(--muted);
-            padding: 18px 0 6px;
-            font-size: 0.98rem;
-        }
-
-        .top-news {
-            display: grid;
-            gap: 20px;
-            grid-template-columns: 1fr;
-        }
-
-        .split-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 20px;
-        }
-
-        .timestamp {
-            text-align: center;
-            color: var(--muted);
-            font-size: 0.84rem;
-            margin: 24px 0 6px;
-        }
-
-        @media (max-width: 1100px) {
-            .video-rail,
-            .hero-grid, .split-grid { grid-template-columns: 1fr; }
-        }
-
-        @media (max-width: 720px) {
-            .container { padding: 16px; }
-            .hero, .section { border-radius: 20px; }
-            .topbar { flex-direction: column; align-items: stretch; }
-            .stats { grid-template-columns: 1fr; }
-            .news-source { flex-direction: column; align-items: flex-start; }
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jarvis V1 — Global News Intelligence</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/news.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
-    <div class="container">
-        <div class="topbar">
-            <button class="back-btn" onclick="window.history.back()">← Back to Dashboard</button>
-            <div class="section-tag"><span class="live-dot"></span> Live news feed</div>
+
+  <!-- BREAKING BANNER (fixed, dismissible) -->
+  <div id="breaking-banner" class="breaking-banner hidden">
+    <span class="breaking-label">◆ BREAKING</span>
+    <span id="breaking-text" class="breaking-text"></span>
+    <button class="breaking-close" id="breaking-close">✕</button>
+  </div>
+
+  <div class="news-root">
+
+    <!-- HEADER -->
+    <header class="news-topbar">
+      <button class="back-btn" onclick="window.history.back()">← Dashboard</button>
+      <div class="header-center">
+        <div class="title">GLOBAL INTELLIGENCE NETWORK</div>
+        <div class="search-wrap">
+          <span class="search-icon">⌕</span>
+          <input id="search-input" class="search-input" type="text" placeholder="Search headlines..." autocomplete="off">
+          <button id="search-clear" class="search-clear hidden">✕</button>
         </div>
+      </div>
+      <div class="header-right">
+        <span class="live-indicator"><span class="pulse-live"></span>LIVE</span>
+        <button class="settings-btn" id="settings-toggle">⚙</button>
+      </div>
+    </header>
 
-        <section class="hero">
-            <div class="hero-grid">
-                <div>
-                    <div class="hero-eyebrow"><span class="live-dot"></span> Jarvis V1 Intelligence Feed</div>
-                    <h1>News from South India first, then India and the world.</h1>
-                    <p>Real-time headlines updated from the last 2 days, arranged for fast scanning with a dark tactical interface.</p>
-                </div>
-                <div class="stats">
-                    <div class="stat">
-                        <small>Focus</small>
-                        <strong>South India</strong>
-                    </div>
-                    <div class="stat">
-                        <small>Mode</small>
-                        <strong>Dark Live Feed</strong>
-                    </div>
-                    <div class="stat">
-                        <small>Coverage</small>
-                        <strong>India + Global</strong>
-                    </div>
-                    <div class="stat">
-                        <small>Refresh</small>
-                        <strong>5 Minutes</strong>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <div id="error-container"></div>
-
-        <section class="section" style="margin-bottom: 20px;">
-            <div class="section-header">
-                <h2>🔥 Hot News Videos</h2>
-                <div class="section-tag">Playable feed</div>
-            </div>
-            <div id="news-videos" class="video-rail">
-                <div class="video-loading">Loading hot news videos...</div>
-            </div>
-        </section>
-
-        <div class="layout">
-            <section class="section">
-                <div class="section-header">
-                    <h2>🏘️ South India News</h2>
-                    <div class="section-tag">Top priority</div>
-                </div>
-                <div id="south-india-news" class="loading">Loading South India news...</div>
-            </section>
-
-            <div class="split-grid">
-                <section class="section">
-                    <div class="section-header">
-                        <h2>🇮🇳 India News</h2>
-                        <div class="section-tag">National</div>
-                    </div>
-                    <div id="india-news" class="loading">Loading India news...</div>
-                </section>
-
-                <section class="section">
-                    <div class="section-header">
-                        <h2>🌍 International News</h2>
-                        <div class="section-tag">Global</div>
-                    </div>
-                    <div id="international-news" class="loading">Loading International news...</div>
-                </section>
-            </div>
-        </div>
-
-        <div class="timestamp">
-            Last updated: <span id="timestamp">--:--:--</span>
-        </div>
+    <!-- CATEGORY FILTER PILLS -->
+    <div class="filter-bar">
+      <button class="filter-pill active" data-cat="all">All</button>
+      <button class="filter-pill si" data-cat="south">South India</button>
+      <button class="filter-pill ni" data-cat="north">North India</button>
+      <button class="filter-pill intl" data-cat="intl">International</button>
+      <button class="filter-pill tech" data-cat="tech">Tech &amp; AI</button>
+      <button class="filter-pill conf" data-cat="conflicts">World Events</button>
     </div>
 
-    <script>
-        async function loadNews() {
-            try {
-                const [newsResponse, videosResponse] = await Promise.all([
-                    fetch('/api/news'),
-                    fetch('/api/news/videos')
-                ]);
+    <!-- SETTINGS PANEL -->
+    <div id="settings-panel" class="settings-panel hidden">
+        <div class="settings-header">
+        <h3>SETTINGS</h3>
+        <button id="settings-close">✕</button>
+      </div>
+      <label><input type="checkbox" id="toggle-markers" checked> Show Map Markers</label>
+      <label><input type="checkbox" id="toggle-stats" checked> Show Statistics</label>
+      <label>
+        Auto-refresh:
+        <select id="refresh-interval">
+          <option value="300000">5 minutes</option>
+          <option value="600000">10 minutes</option>
+          <option value="1800000">30 minutes</option>
+          <option value="3600000">1 hour</option>
+        </select>
+      </label>
+      <button class="btn-refresh" onclick="location.reload()">↻ Refresh Now</button>
+    </div>
 
-                const data = await newsResponse.json();
-                const videos = await videosResponse.json();
+    <!-- FEATURED ROTATOR -->
+    <section class="featured-section">
+      <div id="featured-article" class="featured-card loading">
+        <div class="featured-shine"></div>
+        <div class="featured-content">
+          <div class="feat-skeleton">Loading intelligence feed...</div>
+        </div>
+      </div>
+    </section>
 
-                if (data.error) {
-                    document.getElementById('error-container').innerHTML =
-                        `<div class="error">⚠️ Error loading news: ${data.error}</div>`;
-                    return;
-                }
+    <!-- MAP + HUD -->
+    <section class="map-hero">
+      <div id="map-wrap">
+        <div class="hc tl"></div>
+        <div class="hc tr"></div>
+        <div class="hc bl"></div>
+        <div class="hc br"></div>
 
-                renderVideos(videos.videos || []);
+        <div id="map" class="map-canvas"></div>
 
-                renderNews('south-india', data.south_india);
-                renderNews('india', data.india);
-                renderNews('international', data.international);
+        <div class="map-controls">
+          <button class="map-btn" id="zoom-india">India</button>
+          <button class="map-btn" id="zoom-south">South</button>
+          <button class="map-btn" id="zoom-north">North</button>
+          <button class="map-btn" id="zoom-world">World</button>
+        </div>
 
-                const time = new Date(data.timestamp).toLocaleTimeString();
-                document.getElementById('timestamp').textContent = time;
-            } catch (error) {
-                document.getElementById('error-container').innerHTML =
-                    `<div class="error">⚠️ Failed to load news: ${error.message}</div>`;
-            }
-        }
+        <div class="map-hud">
+          <div class="hud-left">Global Intelligence Feed</div>
+          <div class="hud-right" id="live-clock">--:--:-- IST</div>
+          <div class="stats-card" id="stats-card">
+            <div class="stat-item">
+              <span class="stat-label">Articles</span>
+              <span class="stat-value" id="stat-total">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Categories</span>
+              <span class="stat-value" id="stat-regions">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Videos</span>
+              <span class="stat-value" id="stat-videos">0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Updated</span>
+              <span class="stat-value stat-sm" id="stat-updated">--:--</span>
+            </div>
+          </div>
+          <div class="map-ticker" id="map-ticker"></div>
+        </div>
+      </div>
+    </section>
 
-        function renderVideos(videos) {
-            const container = document.getElementById('news-videos');
+    <!-- NEWS ROWS -->
+    <main class="rows-area">
 
-            if (!videos || videos.length === 0) {
-                container.innerHTML = '<div class="video-loading">No hot news videos available right now</div>';
-                return;
-            }
+      <section class="row-section" data-cat="south">
+        <div class="row-header">
+            <h2 class="row-title si">South India</h2>
+          <div class="row-actions">
+            <span class="row-count" id="count-south">0</span>
+            <button class="scroll-btn" data-row="row-south" data-dir="-1">‹</button>
+            <button class="scroll-btn" data-row="row-south" data-dir="1">›</button>
+          </div>
+        </div>
+        <div class="news-row" id="row-south"></div>
+      </section>
 
-            container.innerHTML = videos.map(video => `
-                <article class="video-card">
-                    <div class="frame">
-                        <iframe
-                            src="${video.embed_url}"
-                            title="${video.title || 'Hot news video'}"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                            allowfullscreen>
-                        </iframe>
-                    </div>
-                    <div class="video-meta">
-                        <div class="video-chip">${prettyRegion(video.region)}</div>
-                        <h3>${video.title || 'Untitled video'}</h3>
-                        <p>${video.channel || 'YouTube'}</p>
-                    </div>
-                </article>
-            `).join('');
-        }
+      <section class="row-section" data-cat="north">
+        <div class="row-header">
+            <h2 class="row-title ni">North India</h2>
+          <div class="row-actions">
+            <span class="row-count" id="count-north">0</span>
+            <button class="scroll-btn" data-row="row-north" data-dir="-1">‹</button>
+            <button class="scroll-btn" data-row="row-north" data-dir="1">›</button>
+          </div>
+        </div>
+        <div class="news-row" id="row-north"></div>
+      </section>
 
-        function prettyRegion(region) {
-            if (region === 'south_india') return 'South India';
-            if (region === 'international') return 'International';
-            return 'India';
-        }
+      <section class="row-section" data-cat="intl">
+        <div class="row-header">
+          <h2 class="row-title intl">International</h2>
+          <div class="row-actions">
+            <span class="row-count" id="count-intl">0</span>
+            <button class="scroll-btn" data-row="row-intl" data-dir="-1">‹</button>
+            <button class="scroll-btn" data-row="row-intl" data-dir="1">›</button>
+          </div>
+        </div>
+        <div class="news-row" id="row-intl"></div>
+      </section>
 
-        function renderNews(region, articles) {
-            const container = document.getElementById(`${region}-news`);
+      <section class="row-section" data-cat="tech">
+        <div class="row-header">
+          <h2 class="row-title tech">Tech &amp; AI</h2>
+          <div class="row-actions">
+            <span class="row-count" id="count-tech">0</span>
+            <button class="scroll-btn" data-row="row-tech" data-dir="-1">‹</button>
+            <button class="scroll-btn" data-row="row-tech" data-dir="1">›</button>
+          </div>
+        </div>
+        <div class="news-row" id="row-tech"></div>
+      </section>
 
-            if (!articles || articles.length === 0) {
-                container.innerHTML = '<p style="color: #8ea4c0;">No news available</p>';
-                return;
-            }
+      <section class="row-section" data-cat="conflicts">
+        <div class="row-header">
+          <h2 class="row-title conf">World Events</h2>
+          <div class="row-actions">
+            <span class="row-count" id="count-conflicts">0</span>
+            <button class="scroll-btn" data-row="row-conflicts" data-dir="-1">‹</button>
+            <button class="scroll-btn" data-row="row-conflicts" data-dir="1">›</button>
+          </div>
+        </div>
+        <div class="news-row" id="row-conflicts"></div>
+      </section>
 
-            container.innerHTML = articles.map(article => `
-                <article class="news-item">
-                    <h3>${article.title || 'Untitled'}</h3>
-                    <p>${article.description || 'No description available'}</p>
-                    <div class="news-source">
-                        <span>${article.source || 'Unknown Source'}</span>
-                        <span>${formatDate(article.pubDate)}</span>
-                    </div>
-                    <a href="${article.link}" target="_blank" rel="noreferrer" class="news-link">Read more →</a>
-                </article>
-            `).join('');
-        }
+      <!-- VIDEOS -->
+      <section class="videos-section">
+        <div class="row-header">
+          <h2 class="row-title" style="color:#fff;border-color:#fff">🎥 HOT NEWS VIDEOS</h2>
+          <div class="row-actions">
+            <span class="row-count" id="count-videos">0</span>
+            <button class="refresh-btn" id="refresh-videos" title="Refresh videos">↻</button>
+          </div>
+        </div>
+        <div id="news-videos" class="video-rail">
+          <div class="video-loading"><div class="spinner"></div><p>Fetching hot news videos...</p></div>
+        </div>
+      </section>
 
-        function formatDate(dateStr) {
-            if (!dateStr) return 'Recent';
-            const date = new Date(dateStr);
-            return date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
-        }
+      <!-- TRENDING -->
+      <section class="trending-section">
+        <h2 class="row-title" style="color:#fff;border-color:#fff;margin-bottom:14px">📈 TRENDING TOPICS</h2>
+        <div id="trending-list" class="trending-grid"></div>
+      </section>
 
-        window.addEventListener('load', loadNews);
-        setInterval(loadNews, 5 * 60 * 1000);
-    </script>
+      <!-- ERROR -->
+      <div id="error-container" class="error-banner" style="display:none">
+        <p id="error-message"></p>
+        <button onclick="location.reload()" class="btn-retry">↻ Retry</button>
+      </div>
+    </main>
+
+    <footer class="news-footer">
+      <p>Last updated: <span id="footer-time">--:--:--</span> &nbsp;|&nbsp; Sources: Google News RSS &amp; YouTube</p>
+      <p>Jarvis V1 Intelligence Network &nbsp;•&nbsp; Global Real-time Feed</p>
+    </footer>
+  </div>
+
+  <!-- ARTICLE MODAL -->
+  <div id="article-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-backdrop" id="modal-backdrop"></div>
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-cat" id="modal-cat"></span>
+        <button class="modal-close" id="modal-close" aria-label="Close">✕</button>
+      </div>
+      <h2 class="modal-title" id="modal-title"></h2>
+      <p class="modal-desc" id="modal-desc"></p>
+      <div class="modal-meta">
+        <span id="modal-source"></span>
+        <span id="modal-date"></span>
+      </div>
+      <a id="modal-link" href="#" target="_blank" rel="noopener" class="modal-read-btn">Read Full Story →</a>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/static/app.js"></script>
+  <script src="/static/news.js"></script>
 </body>
 </html>

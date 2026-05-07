@@ -46,6 +46,12 @@ try:
 except ImportError:
     _PYGETWINDOW = False
 
+try:
+    import psutil
+    _PSUTIL = True
+except ImportError:
+    _PSUTIL = False
+
 # ── Platform ──────────────────────────────────────────────────────────────────
 _OS = platform.system()   # "Windows" | "Darwin" | "Linux"
 

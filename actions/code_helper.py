@@ -23,10 +23,9 @@ def _get_api_key() -> str:
         return json.load(f)["gemini_api_key"]
 
 
-def _get_gemini(model: str = GEMINI_MODEL):
-    import google.generativeai as genai
-    genai.configure(api_key=_get_api_key())
-    return genai.GenerativeModel(model)
+def _get_gemini():
+    from google import genai
+    return genai.Client(api_key=_get_api_key())
 
 
 def _clean_code(text: str) -> str:
@@ -146,7 +145,7 @@ def _detect_intent(description: str, file_path: str, code: str) -> str:
 
 def _write(description: str, language: str, output_path: str, player=None) -> tuple[str, Path]:
     lang  = language or "python"
-    model = _get_gemini()
+    client = _get_gemini()
 
     prompt = f"""You are an expert {lang} developer.
 Write clean, working, well-commented {lang} code for the description below.
@@ -161,7 +160,7 @@ Description: {description}
 
 Code:"""
 
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
     code     = _clean_code(response.text)
     path     = _resolve_save_path(output_path, lang)
     _save_file(path, code)
@@ -169,7 +168,7 @@ Code:"""
 
 
 def _fix_code(code: str, error_output: str, description: str) -> str:
-    model  = _get_gemini()
+    client  = _get_gemini()
     prompt = f"""You are an expert debugger.
 The code below failed with the following error. Fix it.
 Return ONLY the corrected code — no explanation, no markdown, no backticks.
@@ -184,7 +183,7 @@ Broken code:
 
 Fixed code:"""
 
-    response = model.generate_content(prompt)
+    response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
     return _clean_code(response.text)
 
 
@@ -303,7 +302,7 @@ def _edit_action(file_path, instruction, player) -> str:
     if player:
         player.write_log("[Code] Editing file...")
 
-    model  = _get_gemini()
+    client  = _get_gemini()
     prompt = f"""You are an expert code editor.
 Apply the following change to the code below.
 Return ONLY the complete updated code — no explanation, no markdown, no backticks.
@@ -316,7 +315,7 @@ Original code:
 Updated code:"""
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         edited   = _clean_code(response.text)
     except Exception as e:
         return f"Could not edit code: {e}"
@@ -337,7 +336,7 @@ def _explain_action(file_path, code, player) -> str:
     if player:
         player.write_log("[Code] Analyzing code...")
 
-    model  = _get_gemini()
+    client  = _get_gemini()
     prompt = f"""Explain what this code does in simple, clear language.
 Focus on: what it does, how it works, and any important details.
 Be concise — 3 to 6 sentences maximum.
@@ -348,7 +347,7 @@ Code:
 Explanation:"""
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         return response.text.strip()
     except Exception as e:
         return f"Could not explain code: {e}"
@@ -378,7 +377,7 @@ def _optimize_action(file_path, code, language, output_path, player) -> str:
         player.write_log("[Code] Optimizing code...")
 
     lang  = language or "python"
-    model = _get_gemini()
+    client = _get_gemini()
 
     prompt = f"""You are an expert {lang} developer and code reviewer.
 Optimize the following code for:
@@ -395,7 +394,7 @@ Original code:
 Optimized code:"""
 
     try:
-        response  = model.generate_content(prompt)
+        response  = client.models.generate_content(model=GEMINI_MODEL, contents=prompt)
         optimized = _clean_code(response.text)
     except Exception as e:
         return f"Could not optimize code: {e}"

@@ -1,8 +1,12 @@
 import json
+import logging
+import os
 from datetime import datetime
 from threading import Lock
 from pathlib import Path
 import sys
+
+logger = logging.getLogger("jarvis.memory")
 
 
 def get_base_dir() -> Path:
@@ -13,6 +17,7 @@ def get_base_dir() -> Path:
 
 BASE_DIR         = get_base_dir()
 MEMORY_PATH      = BASE_DIR / "memory" / "long_term.json"
+ARCHIVE_PATH     = BASE_DIR / "memory" / "long_term_archive.json"
 _lock            = Lock()
 MAX_VALUE_LENGTH = 380
 MEMORY_MAX_CHARS = 2200
@@ -41,7 +46,7 @@ def load_memory() -> dict:
                 return data
             return _empty_memory()
         except Exception as e:
-            print(f"[Memory] ⚠️ Load error: {e}")
+            logger.error("Load error: %s", e)
             return _empty_memory()
 
 def _all_entries(memory: dict) -> list[tuple]:
@@ -55,14 +60,36 @@ def _all_entries(memory: dict) -> list[tuple]:
     return entries
 
 
+def _archive_entry(cat: str, key: str, entry: dict) -> None:
+    """Move an evicted entry to the archive file instead of deleting it."""
+    try:
+        ARCHIVE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        archive = {}
+        if ARCHIVE_PATH.exists():
+            try:
+                archive = json.loads(ARCHIVE_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                archive = {}
+        if cat not in archive:
+            archive[cat] = {}
+        archive[cat][key] = entry
+        archive[cat][key]["archived_at"] = datetime.now().strftime("%Y-%m-%d")
+        ARCHIVE_PATH.write_text(
+            json.dumps(archive, indent=2, ensure_ascii=False), encoding="utf-8"
+        )
+        logger.info("Archived %s/%s → long_term_archive.json", cat, key)
+    except Exception as e:
+        logger.error("Archive error: %s", e)
+
+
 def _trim_to_limit(memory: dict) -> dict:
     if len(json.dumps(memory, ensure_ascii=False)) <= MEMORY_MAX_CHARS:
         return memory
     entries = _all_entries(memory)
     entries.sort(key=lambda t: t[2].get("updated", "0000-00-00"))
-    for cat, key, _ in entries:
+    for cat, key, entry in entries:
+        _archive_entry(cat, key, entry)   # save before removing
         del memory[cat][key]
-        print(f"[Memory] 🗑️  Trimmed {cat}/{key}")
         if len(json.dumps(memory, ensure_ascii=False)) <= MEMORY_MAX_CHARS:
             break
     return memory
@@ -72,11 +99,11 @@ def save_memory(memory: dict) -> None:
         return
     memory = _trim_to_limit(memory)
     MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(memory, indent=2, ensure_ascii=False)
     with _lock:
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        tmp = MEMORY_PATH.with_suffix(".tmp")
+        tmp.write_text(payload, encoding="utf-8")
+        os.replace(tmp, MEMORY_PATH)
 
 
 def _truncate_value(val: str) -> str:
@@ -114,7 +141,7 @@ def update_memory(memory_update: dict) -> dict:
     memory = load_memory()
     if _recursive_update(memory, memory_update):
         save_memory(memory)
-        print(f"[Memory] 💾 Saved: {list(memory_update.keys())}")
+        logger.info("Saved: %s", list(memory_update.keys()))
     return memory
 
 def format_memory_for_prompt(memory: dict | None) -> str:

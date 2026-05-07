@@ -902,18 +902,125 @@ def _desktop_send(app_name: str, receiver: str, message: str, debug: bool = Fals
     return f"Failed to send message to {receiver} via {app_name}."
 
 
-def _send_whatsapp(receiver: str, message: str) -> str:
-    # Prefer native desktop app when available (avoids browser transliteration).
-    debug = getattr(sys, "_send_debug", False)
-    debug_dir = getattr(sys, "_send_debug_dir", None)
-    desktop_result = _desktop_send("WhatsApp", receiver, message, debug=debug, debug_dir=debug_dir)
-    if desktop_result and "sent" in desktop_result.lower():
-        print(f"[SendMessage] ✅ Desktop WhatsApp succeeded: {desktop_result}")
-        return desktop_result
+def _whatsapp_direct_send(receiver: str, message: str, debug_dir: str | None = None) -> str:
+    """Reliable WhatsApp Desktop send using keyboard shortcuts and coordinates."""
+    _require_pyautogui()
 
-    # Enforce desktop-first behavior: do not fall back to WhatsApp Web automatically.
-    print(f"[SendMessage] ❌ Desktop WhatsApp failed or not confirmed: {desktop_result}")
-    return desktop_result
+    # --- 1. Find or launch WhatsApp ---
+    wa_win = None
+    if _PYGETWINDOW:
+        try:
+            wins = [w for w in gw.getAllWindows() if "whatsapp" in (w.title or "").lower()]
+            if wins:
+                wa_win = wins[0]
+        except Exception:
+            pass
+
+    if wa_win is None:
+        _launch_whatsapp_desktop()
+        time.sleep(3.5)
+        if _PYGETWINDOW:
+            try:
+                wins = [w for w in gw.getAllWindows() if "whatsapp" in (w.title or "").lower()]
+                if wins:
+                    wa_win = wins[0]
+            except Exception:
+                pass
+
+    if wa_win is None:
+        return "Could not open WhatsApp window."
+
+    # --- 2. Maximize and focus ---
+    try:
+        wa_win.maximize()
+        time.sleep(0.4)
+        wa_win.activate()
+        time.sleep(0.5)
+    except Exception:
+        pass
+
+    # Force focus by clicking the center of the window
+    try:
+        cx = wa_win.left + wa_win.width  // 2
+        cy = wa_win.top  + wa_win.height // 2
+        pyautogui.click(cx, cy)
+        time.sleep(0.3)
+    except Exception:
+        pass
+
+    if debug_dir:
+        _save_debug_snapshot("01_wa_focused", debug_dir)
+
+    # --- 3. Open search with Ctrl+F shortcut ---
+    pyautogui.hotkey("ctrl", "f")
+    time.sleep(0.8)
+
+    # Clear any existing text and type receiver
+    pyautogui.hotkey("ctrl", "a")
+    time.sleep(0.1)
+    pyautogui.press("delete")
+    time.sleep(0.1)
+    pyautogui.write(receiver, interval=0.05)
+    time.sleep(2.0)   # wait for search results to load
+
+    if debug_dir:
+        _save_debug_snapshot("02_search_typed", debug_dir)
+
+    # --- 4. Click directly on the first chat result row ---
+    # Results appear below the search box; first chat result is at ~35% height
+    left = wa_win.left
+    top  = wa_win.top
+    w    = wa_win.width
+    h    = wa_win.height
+    rx = left + int(w * 0.17)   # centre of left chat panel
+    ry = top  + int(h * 0.36)   # first result row ("chinni" appears at ~36%)
+    pyautogui.click(rx, ry)
+    time.sleep(1.5)   # wait for chat to open
+
+    if debug_dir:
+        _save_debug_snapshot("03_chat_opened", debug_dir)
+
+    # --- 5. Click message input — window already maximized and focused, don't touch it ---
+    # Pressing escape or re-activating the window causes the chat to close, so skip both.
+    # Use the same bounds captured before the chat result was clicked (window hasn't moved).
+    time.sleep(0.6)   # let the chat panel fully render
+
+    mx = left + int(w * 0.65)    # centre of the right (chat) panel
+    my = top  + int(h * 0.945)   # message input bar near the bottom
+    for _ in range(3):
+        pyautogui.click(mx, my)
+        time.sleep(0.25)
+
+    # --- 6. Paste message ---
+    if _PYPERCLIP:
+        pyperclip.copy(message)
+        time.sleep(0.15)
+        pyautogui.hotkey("ctrl", "v")
+    else:
+        pyautogui.write(message, interval=0.04)
+    time.sleep(0.4)
+
+    if debug_dir:
+        _save_debug_snapshot("04_message_typed", debug_dir)
+
+    # --- 7. Send ---
+    pyautogui.press("enter")
+    time.sleep(0.5)
+
+    if debug_dir:
+        _save_debug_snapshot("05_after_send", debug_dir)
+
+    return f"Message sent to {receiver} via WhatsApp."
+
+
+def _send_whatsapp(receiver: str, message: str) -> str:
+    debug_dir = getattr(sys, "_send_debug_dir", None)
+    result = _whatsapp_direct_send(receiver, message, debug_dir=debug_dir)
+    if result and "sent" in result.lower():
+        print(f"[SendMessage] ✅ {result}")
+    else:
+        print(f"[SendMessage] ❌ {result}")
+    return result
 
 
 def _send_telegram(receiver: str, message: str) -> str:

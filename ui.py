@@ -19,28 +19,28 @@ API_FILE   = CONFIG_DIR / "api_keys.json"
 SYSTEM_NAME = "J.A.R.V.I.S"
 MODEL_BADGE = "Jarvis V1"
 
-C_BG      = "#02070b"
-C_BG2     = "#061018"
-C_PRI     = "#47dbff"
-C_MID     = "#2f8ea8"
-C_DIM     = "#113243"
-C_DIMMER  = "#07141b"
-C_ACC     = "#ff8a5b"
-C_ACC2    = "#ffd166"
-C_TEXT    = "#d5fbff"
-C_PANEL   = "#08141c"
-C_GLASS   = "#0b1821"
-C_GREEN   = "#24f0a4"
-C_RED     = "#ff5f70"
-C_MUTED   = "#ff7ba0"
-C_HILITE  = "#1d5f72"
-C_SOFT    = "#0b1620"
+C_BG      = "#050508"
+C_BG2     = "#070a12"
+C_PRI     = "#00e5ff"
+C_MID     = "#0096aa"
+C_DIM     = "#1a3a44"
+C_DIMMER  = "#09090e"
+C_ACC     = "#e8a500"
+C_ACC2    = "#ffcd00"
+C_TEXT    = "#cfd8dc"
+C_PANEL   = "#06080f"
+C_GLASS   = "#07090e"
+C_GREEN   = "#69ff47"
+C_RED     = "#ff1744"
+C_MUTED   = "#ff9100"
+C_HILITE  = "#0d3040"
+C_SOFT    = "#05080e"
 
 
 class JarvisUI:
     def __init__(self, face_path, size=None):
         self.root = tk.Tk()
-        self.root.title("J.A.R.V.I.S — Jarvis V1")
+        self.root.title("JARVIS V1 — Combat Neural Interface")
         self.root.resizable(False, False)
         try:
             self.root.attributes("-alpha", 0.985)
@@ -78,7 +78,15 @@ class JarvisUI:
 
         self._jarvis_state = "INITIALISING"
 
-        self.typing_queue = deque()
+        # Dirty-flag — only redraw when something actually changed
+        self._dirty = True
+        self._prev_speaking = False
+        self._prev_muted    = False
+        self._prev_status   = "INITIALISING"
+        self._prev_halo_a   = 0.0
+        self._prev_scale    = 0.0
+
+        self.typing_queue = deque(maxlen=50)
         self.is_typing    = False
 
         self.on_text_command = None
@@ -122,7 +130,13 @@ class JarvisUI:
             self._show_setup_ui()
 
         self._animate()
-        self.root.protocol("WM_DELETE_WINDOW", lambda: os._exit(0))
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def _on_close(self):
+        try:
+            self.root.destroy()
+        finally:
+            os._exit(0)
 
     def _build_mute_button(self):
         BTN_W, BTN_H = 110, 32
@@ -180,8 +194,8 @@ class JarvisUI:
     def _draw_dashboard_button(self):
         c = self._dashboard_canvas
         c.delete("all")
-        c.create_rectangle(0, 0, 154, 32, outline=C_PRI, fill=C_PANEL, width=1)
-        c.create_text(77, 16, text="📊 DASHBOARD", fill=C_PRI, font=("Courier", 10, "bold"))
+        c.create_rectangle(0, 0, 154, 32, outline=C_MID, fill="#06080f", width=1)
+        c.create_text(77, 16, text="// DASHBOARD", fill=C_PRI, font=("Courier", 10, "bold"))
 
     def _toggle_mute(self):
         self.muted = not self.muted
@@ -242,6 +256,7 @@ class JarvisUI:
             ).start()
 
     def set_state(self, state: str):
+        self._dirty = True
         self._jarvis_state = state
         if state == "MUTED":
             self.status_text = "MUTED"
@@ -304,6 +319,7 @@ class JarvisUI:
                 self.target_scale = random.uniform(1.001, 1.007)
                 self.target_halo  = random.uniform(50, 68)
             self.last_t = now
+            self._dirty = True
 
         sp = 0.35 if self.speaking else 0.16
         self.scale  += (self.target_scale - self.scale) * sp
@@ -324,8 +340,23 @@ class JarvisUI:
 
         if t % 40 == 0:
             self.status_blink = not self.status_blink
+            self._dirty = True
 
-        self._draw()
+        # State change always forces redraw
+        if (self.speaking != self._prev_speaking or
+                self.muted != self._prev_muted or
+                self._jarvis_state != self._prev_status):
+            self._dirty = True
+
+        if self._dirty:
+            self._draw()
+            self._prev_speaking = self.speaking
+            self._prev_muted    = self.muted
+            self._prev_status   = self._jarvis_state
+            self._prev_halo_a   = self.halo_a
+            self._prev_scale    = self.scale
+            self._dirty = False
+
         self.root.after(16, self._animate)
 
     def _draw(self):
@@ -339,15 +370,14 @@ class JarvisUI:
 
         for x in range(0, W, 44):
             for y in range(0, H, 44):
-                c.create_rectangle(x, y, x+1, y+1, fill=C_DIMMER, outline="")
+                c.create_rectangle(x, y, x+1, y+1, fill="#0d0d14", outline="")
 
         for r in range(int(FW * 0.54), int(FW * 0.28), -22):
             frac = 1.0 - (r - FW * 0.28) / (FW * 0.26)
-            ga   = max(0, min(255, int(self.halo_a * 0.09 * frac)))
+            ga   = max(0, min(255, int(self.halo_a * 0.12 * frac)))
             if self.muted:
-                gh = f"{ga:02x}"
                 c.create_oval(FCX-r, FCY-r, FCX+r, FCY+r,
-                              outline=f"#{gh}0011", width=2)
+                              outline=self._ac(232, 120, 0, ga), width=2)
             else:
                 gh = f"{ga:02x}"
                 c.create_oval(FCX-r, FCY-r, FCX+r, FCY+r,
@@ -363,12 +393,17 @@ class JarvisUI:
                 c.create_oval(FCX-r, FCY-r, FCX+r, FCY+r,
                               outline=self._ac(0, 212, 255, pa), width=2)
 
-        for idx, (r_frac, w_ring, arc_l, gap) in enumerate([
-                (0.47, 3, 110, 75), (0.39, 2, 75, 55), (0.31, 1, 55, 38)]):
+        ring_configs = [(0.47, 3, 110, 75), (0.39, 2, 75, 55), (0.31, 1, 55, 38)]
+        for idx, (r_frac, w_ring, arc_l, gap) in enumerate(ring_configs):
             ring_r = int(FW * r_frac)
             base_a = self.rings_spin[idx]
-            a_val  = max(0, min(255, int(self.halo_a * (1.0 - idx * 0.18))))
-            col    = self._ac(255, 30, 80, a_val) if self.muted else self._ac(0, 212, 255, a_val)
+            a_val  = max(0, min(255, int(self.halo_a * (1.0 - idx * 0.15))))
+            if self.muted:
+                col = self._ac(232, 120, 0, a_val)
+            elif idx == 1:
+                col = self._ac(232, 165, 0, int(a_val * 0.5))
+            else:
+                col = self._ac(0, 229, 255, a_val)
             for s in range(360 // (arc_l + gap)):
                 start = (base_a + s * (arc_l + gap)) % 360
                 c.create_arc(FCX-ring_r, FCY-ring_r, FCX+ring_r, FCY+ring_r,
@@ -376,15 +411,16 @@ class JarvisUI:
                              outline=col, width=w_ring, style="arc")
 
         sr      = int(FW * 0.49)
-        scan_a  = min(255, int(self.halo_a * 1.4))
-        arc_ext = 70 if self.speaking else 42
-        scan_col = self._ac(255, 30, 80, scan_a) if self.muted else self._ac(0, 212, 255, scan_a)
+        scan_a  = min(255, int(self.halo_a * 1.5))
+        arc_ext = 75 if self.speaking else 46
+        scan_col = self._ac(232, 120, 0, scan_a) if self.muted else self._ac(0, 229, 255, scan_a)
         c.create_arc(FCX-sr, FCY-sr, FCX+sr, FCY+sr,
                      start=self.scan_angle, extent=arc_ext,
                      outline=scan_col, width=3, style="arc")
+        gold_a = scan_a // 2 if not self.muted else scan_a // 3
         c.create_arc(FCX-sr, FCY-sr, FCX+sr, FCY+sr,
                      start=self.scan2_angle, extent=arc_ext,
-                     outline=self._ac(255, 100, 0, scan_a // 2), width=2, style="arc")
+                     outline=self._ac(232, 165, 0, gold_a), width=2, style="arc")
 
         t_out = int(FW * 0.495)
         t_in  = int(FW * 0.472)
@@ -415,45 +451,43 @@ class JarvisUI:
 
         if self._has_face:
             fw = int(FW * self.scale)
-            if (self._face_scale_cache is None or
-                    abs(self._face_scale_cache[0] - self.scale) > 0.004):
+            if self._face_scale_cache is None or self._face_scale_cache[0] != fw:
                 scaled = self._face_pil.resize((fw, fw), Image.BILINEAR)
-                if self.muted:
-                    tinted = scaled.copy()
-                    r_ch, g_ch, b_ch, a_ch = tinted.split()
-                    from PIL import ImageEnhance
-                    g_ch = ImageEnhance.Brightness(
-                        Image.fromarray(__import__('numpy').array(g_ch) // 2)
-                    ).enhance(1.0) if False else g_ch
-                tk_img = ImageTk.PhotoImage(scaled)
-                self._face_scale_cache = (self.scale, tk_img)
+                self._face_scale_cache = (fw, ImageTk.PhotoImage(scaled))
             c.create_image(FCX, FCY, image=self._face_scale_cache[1])
         else:
             orb_r = int(FW * 0.27 * self.scale)
-            orb_color = (255, 30, 80) if self.muted else (0, 65, 120)
-            for i in range(7, 0, -1):
-                r2   = int(orb_r * i / 7)
-                frac = i / 7
-                ga   = max(0, min(255, int(self.halo_a * 1.1 * frac)))
+            orb_color = (232, 120, 0) if self.muted else (0, 140, 220)
+            for i in range(9, 0, -1):
+                r2   = int(orb_r * i / 9)
+                frac = i / 9
+                ga   = max(0, min(255, int(self.halo_a * 1.3 * frac)))
                 c.create_oval(FCX-r2, FCY-r2, FCX+r2, FCY+r2,
                               fill=self._ac(int(orb_color[0]*frac),
                                             int(orb_color[1]*frac),
                                             int(orb_color[2]*frac), ga),
                               outline="")
+            txt_col = self._ac(232, 165, 0, min(255, int(self.halo_a * 2.2))) if self.muted \
+                      else self._ac(0, 229, 255, min(255, int(self.halo_a * 2.2)))
             c.create_text(FCX, FCY, text=SYSTEM_NAME,
-                          fill=self._ac(0, 212, 255, min(255, int(self.halo_a * 2))),
+                          fill=txt_col,
                           font=("Courier", 14, "bold"))
 
-        HDR = 62
-        c.create_rectangle(0, 0, W, HDR, fill="#00080d", outline="")
+        HDR = 66
+        c.create_rectangle(0, 0, W, HDR, fill="#040408", outline="")
         c.create_line(0, HDR, W, HDR, fill=C_MID, width=1)
+        c.create_line(0, HDR + 1, W, HDR + 1, fill=C_BG, width=1)
+        blen2 = 30
+        for bx, by, sdx, sdy in [(0, 0, 1, 1), (W, 0, -1, 1)]:
+            c.create_line(bx, by, bx + sdx * blen2, by, fill=C_PRI, width=1)
+            c.create_line(bx, by, bx, by + sdy * blen2, fill=C_PRI, width=1)
         c.create_text(W // 2, 22, text=SYSTEM_NAME,
-                      fill=C_PRI, font=("Courier", 18, "bold"))
-        c.create_text(W // 2, 44, text="Just A Rather Very Intelligent System",
+                      fill=C_PRI, font=("Courier", 20, "bold"))
+        c.create_text(W // 2, 46, text="// COMBAT NEURAL INTERFACE  ·  JARVIS V1",
                       fill=C_MID, font=("Courier", 9))
-        c.create_text(16, 31, text=MODEL_BADGE,
+        c.create_text(16, 33, text=MODEL_BADGE,
                       fill=C_DIM, font=("Courier", 9), anchor="w")
-        c.create_text(W - 16, 31, text=time.strftime("%H:%M:%S"),
+        c.create_text(W - 16, 33, text=time.strftime("%H:%M:%S"),
                       fill=C_PRI, font=("Courier", 14, "bold"), anchor="e")
 
         sy = FCY + FW // 2 + 45
@@ -493,23 +527,23 @@ class JarvisUI:
         for i in range(N):
             if self.muted:
                 hb  = 2
-                col = C_MUTED
+                col = C_ACC
             elif self.speaking:
                 hb  = random.randint(3, BH)
-                col = C_PRI if hb > BH * 0.6 else C_MID
+                col = C_PRI if hb > BH * 0.6 else C_ACC2
             else:
                 hb  = int(3 + 2 * math.sin(t * 0.08 + i * 0.55))
-                col = C_DIM
+                col = C_HILITE
             bx = wx0 + i * bw
             c.create_rectangle(bx, wy + BH - hb, bx + bw - 1, wy + BH,
                                 fill=col, outline="")
 
-        c.create_rectangle(0, H - 28, W, H, fill="#00080d", outline="")
-        c.create_line(0, H - 28, W, H - 28, fill=C_DIM, width=1)
+        c.create_rectangle(0, H - 28, W, H, fill="#040408", outline="")
+        c.create_line(0, H - 28, W, H - 28, fill=C_MID, width=1)
         c.create_text(W - 16, H - 14, fill=C_DIM, font=("Courier", 8),
-                      text="[F4] MUTE", anchor="e")
+                      text="[F4] MUTE  ·  [DASHBOARD]", anchor="e")
         c.create_text(W // 2, H - 14, fill=C_DIM, font=("Courier", 8),
-                      text="Prasanth Mukkiri Industries  ·  CLASSIFIED  ·  Jarvis V1")
+                      text="PRASANTH MUKKIRI INDUSTRIES  ·  CLASSIFIED  ·  JARVIS V1 NEURAL OS")
 
     def write_log(self, text: str):
         self.typing_queue.append(text)
@@ -541,6 +575,8 @@ class JarvisUI:
         self.log_text.configure(state="normal")
         self._type_char(text, 0, tag)
 
+    _MAX_LOG_LINES = 800
+
     def _type_char(self, text, i, tag):
         if i < len(text):
             self.log_text.insert(tk.END, text[i], tag)
@@ -548,6 +584,9 @@ class JarvisUI:
             self.root.after(8, self._type_char, text, i + 1, tag)
         else:
             self.log_text.insert(tk.END, "\n")
+            line_count = int(self.log_text.index("end-1c").split(".")[0])
+            if line_count > self._MAX_LOG_LINES:
+                self.log_text.delete("1.0", f"{line_count - self._MAX_LOG_LINES}.0")
             self.log_text.configure(state="disabled")
             self.root.after(25, self._start_typing)
 

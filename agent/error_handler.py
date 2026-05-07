@@ -79,10 +79,11 @@ def analyze_error(
             "user_message": str
         }
     """
-    import google.generativeai as genai
+    from google import genai
+    from google.genai import types
 
     if attempt >= max_attempts:
-        print(f"[ErrorHandler] ⚠️ Max attempts reached for step {step.get('step')} — forcing replan")
+        print(f"[ErrorHandler] Max attempts reached for step {step.get('step')} — forcing replan")
         return {
             "decision":      ErrorDecision.REPLAN,
             "reason":        f"Failed {attempt} times: {error[:100]}",
@@ -91,11 +92,7 @@ def analyze_error(
             "user_message":  "Trying a different approach, sir."
         }
 
-    genai.configure(api_key=_get_api_key())
-    model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash-lite",
-        system_instruction=ERROR_ANALYST_PROMPT
-    )
+    client = genai.Client(api_key=_get_api_key())
 
     prompt = f"""Failed step:
 Tool: {step.get('tool')}
@@ -109,7 +106,11 @@ Error:
 Attempt number: {attempt}"""
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash-lite-preview-06-17",
+            contents=prompt,
+            config=types.GenerateContentConfig(system_instruction=ERROR_ANALYST_PROMPT),
+        )
         text     = response.text.strip()
         text     = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
 
@@ -149,13 +150,12 @@ def generate_fix(step: dict, error: str, fix_suggestion: str) -> dict:
 
     Returns a modified step dict.
     """
-    import google.generativeai as genai
+    from google import genai
     from pathlib import Path
     import tempfile
     import os
 
-    genai.configure(api_key=_get_api_key())
-    model = genai.GenerativeModel(model_name="gemini-2.0-flash")
+    client = genai.Client(api_key=_get_api_key())
 
     prompt = f"""A task step failed. Generate a replacement step.
 
@@ -171,7 +171,7 @@ Write a Python script that accomplishes the same goal differently.
 Return ONLY the Python code, no explanation."""
 
     try:
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(model="gemini-2.0-flash", contents=prompt)
         code = response.text.strip()
         code = re.sub(r"```(?:python)?", "", code).strip().rstrip("`").strip()
 

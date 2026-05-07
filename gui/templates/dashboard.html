@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Jarvis V1 Dashboard</title>
+    <title>JARVIS V1 — Tactical Command Interface</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
@@ -11,47 +12,54 @@
     <div class="hud-glow hud-glow-left"></div>
     <div class="hud-glow hud-glow-right"></div>
     <div class="container">
+
         <!-- Header -->
         <header class="header">
             <div class="header-content">
                 <div class="brand-block">
-                    <h1 class="logo">🤖 Jarvis V1</h1>
-                    <p class="logo-subtitle">Neural Control Interface</p>
+                    <h1 class="logo">JARVIS V1</h1>
+                    <p class="logo-subtitle">// COMBAT NEURAL INTERFACE</p>
                 </div>
+                <nav class="header-nav">
+                    <a href="/news" class="nav-link">// INTEL FEED</a>
+                </nav>
                 <div class="header-status">
-                    <span id="status-indicator" class="status-badge status-sleeping">Sleeping</span>
+                    <span id="status-indicator" class="status-badge status-sleeping">STANDBY</span>
                     <span id="status-time" class="status-time">--:--</span>
                 </div>
             </div>
         </header>
 
+        <!-- Telemetry Strip -->
         <section class="telemetry-strip" aria-label="System telemetry">
             <div class="telemetry-chip">
-                <span class="telemetry-label">Core</span>
-                <span class="telemetry-value" id="telemetry-core">JARVIS LINKED</span>
+                <span class="telemetry-label">A.I. Core</span>
+                <span class="telemetry-value" id="telemetry-core">V1 ONLINE</span>
             </div>
             <div class="telemetry-chip">
-                <span class="telemetry-label">Signal</span>
-                <span class="telemetry-value" id="telemetry-signal">STABLE</span>
+                <span class="telemetry-label">Uplink</span>
+                <span class="telemetry-value" id="telemetry-signal">NOMINAL</span>
             </div>
             <div class="telemetry-chip">
-                <span class="telemetry-label">Mode</span>
-                <span class="telemetry-value" id="telemetry-mode">ACTIVE</span>
+                <span class="telemetry-label">Protocol</span>
+                <span class="telemetry-value" id="telemetry-mode">ENGAGED</span>
             </div>
             <div class="telemetry-chip telemetry-chip-wide">
-                <span class="telemetry-label">Command Queue</span>
-                <span class="telemetry-value" id="telemetry-queue">0 PENDING</span>
+                <span class="telemetry-label">Task Queue</span>
+                <span class="telemetry-value" id="telemetry-queue">0 QUEUED</span>
             </div>
         </section>
 
         <!-- Main Grid -->
         <main class="dashboard-grid">
-            <!-- Left Panel: Status & Control -->
+
+            <!-- Left Panel -->
             <aside class="sidebar">
-                <!-- Reactor Core -->
+
+                <!-- Arc Reactor -->
                 <div class="card reactor-card">
-                    <h3 class="card-title">Reactor Core</h3>
-                    <div class="reactor-shell" aria-label="Jarvis reactor core">
+                    <h3 class="card-title">Arc Reactor</h3>
+                    <div class="reactor-shell" aria-label="Jarvis arc reactor core">
                         <div class="reactor-ring reactor-ring-outer"></div>
                         <div class="reactor-ring reactor-ring-middle"></div>
                         <div class="reactor-ring reactor-ring-inner"></div>
@@ -62,7 +70,7 @@
                         </div>
                     </div>
                     <div class="reactor-meta">
-                        <span class="reactor-label">Status</span>
+                        <span class="reactor-label">Protocol</span>
                         <span class="reactor-value" id="reactor-status">Standby</span>
                     </div>
                     <div class="reactor-meter">
@@ -70,9 +78,9 @@
                     </div>
                 </div>
 
-                <!-- Signal Field -->
+                <!-- Audio Uplink -->
                 <div class="card signal-card">
-                    <h3 class="card-title">Signal Field</h3>
+                    <h3 class="card-title">Audio Uplink</h3>
                     <div class="signal-radar" aria-label="Live signal radar">
                         <div class="signal-radar-grid"></div>
                         <div class="signal-radar-sweep"></div>
@@ -84,25 +92,25 @@
                         <span></span><span></span><span></span><span></span>
                     </div>
                     <div class="signal-meta">
-                        <span class="reactor-label">Waveform</span>
+                        <span class="reactor-label">Audio Feed</span>
                         <span class="reactor-value" id="signal-state">Quiet</span>
                     </div>
                 </div>
 
-                <!-- Agent Status Card -->
+                <!-- System Status -->
                 <div class="card status-card">
-                    <h3 class="card-title">Agent Status</h3>
+                    <h3 class="card-title">System Status</h3>
                     <div class="status-grid">
                         <div class="status-item">
-                            <label>State</label>
-                            <span id="agent-state" class="value">Sleeping</span>
+                            <label>Neural State</label>
+                            <span id="agent-state" class="value">STANDBY</span>
                         </div>
                         <div class="status-item">
-                            <label>Listening</label>
-                            <span id="agent-listening" class="value">Off</span>
+                            <label>Uplink</label>
+                            <span id="agent-listening" class="value">INACTIVE</span>
                         </div>
                         <div class="status-item">
-                            <label>Last Command</label>
+                            <label>Last Directive</label>
                             <span id="last-command" class="value ellipsis">None</span>
                         </div>
                         <div class="status-item">
@@ -112,77 +120,86 @@
                     </div>
                 </div>
 
-                <!-- System Resources Card -->
+                <!-- Power Grid -->
                 <div class="card resources-card">
-                    <h3 class="card-title">System Resources</h3>
+                    <h3 class="card-title">Power Grid <span id="guardian-badge" class="guardian-badge" style="display:none;">GUARDIAN</span></h3>
                     <div class="resource-item">
-                        <label>CPU</label>
+                        <label>CPU Load</label>
                         <div class="progress-bar">
                             <div id="cpu-usage" class="progress-fill" style="width: 0%"></div>
                         </div>
                         <span id="cpu-percent" class="resource-label">0%</span>
                     </div>
                     <div class="resource-item">
-                        <label>Memory</label>
+                        <label>RAM Usage</label>
                         <div class="progress-bar">
                             <div id="memory-usage" class="progress-fill" style="width: 0%"></div>
                         </div>
                         <span id="memory-percent" class="resource-label">0%</span>
                     </div>
-                </div>
-
-                <!-- Quick Actions -->
-                <div class="card">
-                    <h3 class="card-title">Quick Actions</h3>
-                    <div class="action-buttons">
-                        <button class="btn btn-primary" onclick="sendCommand('open chrome')">
-                            🌐 Open Chrome
-                        </button>
-                        <button class="btn btn-primary" onclick="sendCommand('open code')">
-                            💻 Open Code
-                        </button>
-                        <button class="btn btn-secondary" onclick="toggleState()">
-                            😴 Toggle Sleep
-                        </button>
-                        <button class="btn btn-secondary" onclick="refreshData()">
-                            🔄 Refresh
-                        </button>
+                    <div class="resource-item">
+                        <label>Disk Free</label>
+                        <div class="progress-bar">
+                            <div id="disk-usage" class="progress-fill progress-fill-inv" style="width: 100%"></div>
+                        </div>
+                        <span id="disk-percent" class="resource-label">--</span>
+                    </div>
+                    <div id="battery-row" class="resource-item" style="display:none;">
+                        <label>Battery</label>
+                        <div class="progress-bar">
+                            <div id="battery-usage" class="progress-fill progress-fill-green" style="width: 0%"></div>
+                        </div>
+                        <span id="battery-percent" class="resource-label">--</span>
+                    </div>
+                    <div id="temp-row" class="resource-item" style="display:none;">
+                        <label>CPU Temp</label>
+                        <span id="temp-value" class="resource-label guardian-temp">--</span>
                     </div>
                 </div>
 
-                <!-- Manual Command Input -->
+                <!-- Tactical Ops -->
                 <div class="card">
-                    <h3 class="card-title">Manual Command</h3>
+                    <h3 class="card-title">Tactical Ops</h3>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="sendCommand('open chrome')">LAUNCH BROWSER</button>
+                        <button class="btn btn-primary" onclick="sendCommand('open code')">LAUNCH IDE</button>
+                        <button class="btn btn-secondary" onclick="toggleState()">TOGGLE STANDBY</button>
+                        <button class="btn btn-secondary" onclick="refreshData()">SYNC DATA</button>
+                    </div>
+                </div>
+
+                <!-- Command Relay -->
+                <div class="card">
+                    <h3 class="card-title">Command Relay</h3>
                     <div class="command-input">
-                        <input 
-                            type="text" 
-                            id="command-input" 
-                            placeholder="Enter a voice command..."
+                        <input
+                            type="text"
+                            id="command-input"
+                            placeholder="Input directive..."
                             onkeypress="handleCommandKeypress(event)"
                         >
-                        <button class="btn btn-primary" onclick="sendManualCommand()">
-                            Send
-                        </button>
+                        <button class="btn btn-primary" onclick="sendManualCommand()">EXECUTE</button>
                     </div>
                 </div>
+
             </aside>
 
-            <!-- Right Panel: Logs & History -->
+            <!-- Right Panel -->
             <section class="main-content">
                 <div class="console-banner">
                     <div class="console-banner-left">
-                        <span class="banner-kicker">IRON CONTROL LAYER</span>
+                        <span class="banner-kicker">JARVIS V1 COMMAND CENTER</span>
                         <h2>Neural Command Matrix</h2>
-                        <p>Live speech, system telemetry, and tool execution in a single tactical view.</p>
+                        <p>Real-time voice processing, neural telemetry and tool execution — unified tactical overlay.</p>
                     </div>
                     <div class="console-banner-right">
                         <div class="banner-stat">
-                            <span>Pulse</span>
+                            <span>Uplink</span>
                             <strong id="banner-pulse">--</strong>
                         </div>
                         <div class="banner-stat">
                             <span>Protocol</span>
-                            <strong id="banner-protocol">Realtime</strong>
+                            <strong id="banner-protocol">REALTIME</strong>
                         </div>
                         <div class="banner-stat">
                             <span>Queue</span>
@@ -193,185 +210,412 @@
 
                 <!-- Tabs -->
                 <div class="tabs">
-                    <button class="tab-button active" onclick="switchTab('logs')">
-                        📋 Live Logs
-                    </button>
-                    <button class="tab-button" onclick="switchTab('history')">
-                        📜 Action History
-                    </button>
-                    <button class="tab-button" onclick="switchTab('settings')">
-                        ⚙️ Settings
-                    </button>
-                    <button class="tab-button" onclick="switchTab('analytics')">
-                        📊 Analytics
-                    </button>
+                    <button class="tab-button active" onclick="switchTab('logs')">// ACTIVITY LOG</button>
+                    <button class="tab-button" onclick="switchTab('history')">// MISSION LOG</button>
+                    <button class="tab-button" onclick="switchTab('settings')">// CONFIG</button>
+                    <button class="tab-button" onclick="switchTab('analytics')">// DIAGNOSTICS</button>
+                    <button class="tab-button" onclick="switchTab('chains')">// CHAINS</button>
+                    <button class="tab-button" onclick="switchTab('memory')">// MEMORY</button>
                 </div>
 
-                <!-- Logs Tab -->
+                <!-- Activity Log Tab -->
                 <div id="logs-tab" class="tab-content active">
                     <div class="logs-container">
                         <div class="logs-header">
-                            <h3>Live Activity Log</h3>
-                            <button class="btn btn-small" onclick="clearLogs()">Clear</button>
+                            <h3>Activity Stream</h3>
+                            <button class="btn btn-small" onclick="clearLogs()">PURGE</button>
                         </div>
                         <div id="logs-list" class="logs-list">
-                            <div class="log-empty">No logs yet. Waiting for activity...</div>
+                            <div class="log-empty">No activity detected. Systems on standby...</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- History Tab -->
+                <!-- Mission Log Tab -->
                 <div id="history-tab" class="tab-content">
                     <div class="history-container">
-                        <h3>Recent Actions</h3>
+                        <h3>Mission Log</h3>
                         <table id="history-table" class="history-table">
                             <thead>
                                 <tr>
-                                    <th>Time</th>
-                                    <th>Command</th>
-                                    <th>Tool</th>
+                                    <th>Timestamp</th>
+                                    <th>Directive</th>
+                                    <th>Module</th>
                                     <th>Status</th>
-                                    <th>Duration</th>
+                                    <th>Exec Time</th>
                                 </tr>
                             </thead>
                             <tbody id="history-body">
-                                <tr><td colspan="5" class="empty">No history yet</td></tr>
+                                <tr><td colspan="5" class="empty">No missions logged.</td></tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
 
-                <!-- Settings Tab -->
+                <!-- Config Tab -->
                 <div id="settings-tab" class="tab-content">
                     <div class="settings-container">
-                        <h3>Configuration</h3>
+                        <h3>System Configuration</h3>
                         <div class="settings-form">
                             <div class="form-group">
-                                <label>Wake Words (comma-separated)</label>
+                                <label>Activation Keywords (comma-separated)</label>
                                 <input type="text" id="wake-words" placeholder="jarvis, hey jarvis, ok jarvis">
                             </div>
                             <div class="form-group">
-                                <label>Sleep Words (comma-separated)</label>
+                                <label>Standby Keywords (comma-separated)</label>
                                 <input type="text" id="sleep-words" placeholder="go to sleep, sleep mode">
                             </div>
                             <div class="form-group">
-                                <label>Active Timeout (seconds)</label>
+                                <label>Active Duration (seconds)</label>
                                 <input type="number" id="timeout-seconds" min="5" max="300" value="30">
                             </div>
                             <div class="form-group">
-                                <label>Energy Threshold</label>
+                                <label>Audio Threshold</label>
                                 <input type="number" id="energy-threshold" min="100" max="1000" value="300">
                             </div>
                             <div class="form-group">
-                                <label>VAD Aggressiveness (0-3)</label>
+                                <label>VAD Sensitivity (0-3)</label>
                                 <input type="number" id="vad-aggressiveness" min="0" max="3" value="1">
                             </div>
                             <div class="form-actions">
-                                <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
-                                <button class="btn btn-secondary" onclick="loadSettings()">Reset</button>
+                                <button class="btn btn-primary" onclick="saveSettings()">COMMIT CHANGES</button>
+                                <button class="btn btn-secondary" onclick="loadSettings()">RESTORE DEFAULT</button>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Analytics Tab -->
+                <!-- Diagnostics Tab -->
                 <div id="analytics-tab" class="tab-content">
                     <div class="analytics-container">
                         <div class="analytics-header">
-                            <h3>Performance Analytics</h3>
+                            <h3>System Diagnostics</h3>
                             <div class="health-badge" id="health-score">
-                                <span>Health:</span>
+                                <span>Integrity:</span>
                                 <strong id="health-percent">100%</strong>
                             </div>
                         </div>
 
-                        <!-- Insights -->
                         <div class="insights-panel" id="insights-panel">
                             <div class="insight-item insight-info">
-                                <span>Loading insights...</span>
+                                <span>Analyzing system data...</span>
                             </div>
                         </div>
 
-                        <!-- Charts Grid -->
                         <div class="charts-grid">
-                            <!-- Success Rates Chart -->
                             <div class="chart-card">
-                                <h4>Success Rates by Tool</h4>
+                                <h4>Module Success Rate</h4>
                                 <div id="success-rates-chart" class="chart-placeholder">
                                     <canvas id="success-rates-canvas"></canvas>
                                 </div>
                             </div>
-
-                            <!-- Tool Usage Chart -->
                             <div class="chart-card">
-                                <h4>Most Used Tools</h4>
+                                <h4>Top Modules</h4>
                                 <div id="tool-usage-chart" class="chart-placeholder">
                                     <canvas id="tool-usage-canvas"></canvas>
                                 </div>
                             </div>
-
-                            <!-- Execution Times Chart -->
                             <div class="chart-card">
-                                <h4>Execution Times (ms)</h4>
+                                <h4>Execution Latency (ms)</h4>
                                 <div id="execution-times-chart" class="chart-placeholder">
                                     <canvas id="execution-times-canvas"></canvas>
                                 </div>
                             </div>
-
-                            <!-- Failures Chart -->
                             <div class="chart-card">
-                                <h4>Tool Failures</h4>
+                                <h4>Module Failures</h4>
                                 <div id="failures-chart" class="chart-placeholder">
                                     <canvas id="failures-canvas"></canvas>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Stats Table -->
                         <div class="stats-table-container">
-                            <h4>Tool Statistics</h4>
+                            <h4>Module Statistics</h4>
                             <table class="stats-table" id="stats-table">
                                 <thead>
                                     <tr>
-                                        <th>Tool</th>
-                                        <th>Executions</th>
-                                        <th>Avg Time (ms)</th>
-                                        <th>p95 (ms)</th>
+                                        <th>Module</th>
+                                        <th>Exec Count</th>
+                                        <th>Avg Latency</th>
+                                        <th>P95 Latency</th>
                                         <th>Success Rate</th>
                                     </tr>
                                 </thead>
                                 <tbody id="stats-body">
-                                    <tr><td colspan="5" style="text-align: center;">Loading stats...</td></tr>
+                                    <tr><td colspan="5" style="text-align:center;">Fetching module data...</td></tr>
                                 </tbody>
                             </table>
                         </div>
 
-                        <!-- Emotion Detection Card -->
                         <div class="emotion-card card">
-                            <h4>Emotion Detection</h4>
+                            <h4>Biometric Scan</h4>
                             <div class="emotion-controls">
-                                <button class="btn btn-primary" onclick="startEmotionDetection()">
-                                    📹 Start Recording
-                                </button>
-                                <button class="btn btn-secondary" onclick="stopEmotionDetection()">
-                                    ⏹️ Stop
-                                </button>
+                                <button class="btn btn-primary" onclick="startEmotionDetection()">INITIATE SCAN</button>
+                                <button class="btn btn-secondary" onclick="stopEmotionDetection()">TERMINATE</button>
                             </div>
                             <div class="emotion-stats" id="emotion-stats">
                                 <p style="color: var(--text-secondary); text-align: center; padding: 1rem;">
-                                    Emotion detection ready. Click Start to begin recording.
+                                    Biometric scanner ready. Initiate scan to begin analysis.
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Chains Tab -->
+                <div id="chains-tab" class="tab-content">
+                    <div class="chains-container">
+                        <div class="chains-header">
+                            <h3>Task Chain Matrix</h3>
+                            <span class="chains-subtitle">// Multi-step execution sequencer — chain tools in natural language</span>
+                        </div>
+
+                        <div class="chain-input-block">
+                            <input
+                                type="text"
+                                id="chain-goal-input"
+                                class="chain-goal-input"
+                                placeholder="open chrome then search weather in hyderabad then send result to chinni on whatsapp..."
+                                onkeypress="handleChainKeypress(event)"
+                            >
+                            <button class="btn btn-primary" onclick="executeChain()">EXECUTE CHAIN</button>
+                        </div>
+
+                        <div id="chain-status-msg" class="chain-status-msg" style="display:none;"></div>
+
+                        <div id="chain-list" class="chain-list">
+                            <div class="chain-empty">No chains executed yet. Enter a multi-step command above.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Memory Tab -->
+                <div id="memory-tab" class="tab-content">
+                    <div class="memory-container">
+
+                        <!-- Knowledge Graph Banner (top) -->
+                        <div class="kg-banner-card">
+                            <div class="kg-banner-left">
+                                <div class="kg-banner-icon">
+                                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                                        <circle cx="14" cy="14" r="5" fill="#00e5ff" opacity="0.9"/>
+                                        <circle cx="4"  cy="8"  r="3" fill="#69ff47" opacity="0.8"/>
+                                        <circle cx="24" cy="8"  r="3" fill="#f5a623" opacity="0.8"/>
+                                        <circle cx="4"  cy="20" r="3" fill="#bb86fc" opacity="0.8"/>
+                                        <circle cx="24" cy="20" r="3" fill="#ff6b9d" opacity="0.8"/>
+                                        <line x1="14" y1="14" x2="4"  y2="8"  stroke="#00e5ff" stroke-width="1.2" opacity="0.5"/>
+                                        <line x1="14" y1="14" x2="24" y2="8"  stroke="#00e5ff" stroke-width="1.2" opacity="0.5"/>
+                                        <line x1="14" y1="14" x2="4"  y2="20" stroke="#00e5ff" stroke-width="1.2" opacity="0.5"/>
+                                        <line x1="14" y1="14" x2="24" y2="20" stroke="#00e5ff" stroke-width="1.2" opacity="0.5"/>
+                                    </svg>
+                                </div>
+                                <div>
+                                    <div class="kg-banner-title">Knowledge Graph</div>
+                                    <div class="kg-banner-sub">Auto-extracted entity map — people, places, projects &amp; relationships</div>
+                                </div>
+                            </div>
+                            <div class="kg-banner-stats" id="kg-banner-stats">
+                                <div class="kg-stat-chip"><span id="kg-stat-nodes">—</span><label>Entities</label></div>
+                                <div class="kg-stat-chip"><span id="kg-stat-edges">—</span><label>Relations</label></div>
+                                <div class="kg-stat-chip"><span id="kg-stat-types">—</span><label>Types</label></div>
+                            </div>
+                            <button class="btn-kg-open" onclick="openKGModal()">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="margin-right:6px">
+                                    <path d="M2 8a6 6 0 1 0 12 0A6 6 0 0 0 2 8zm6-1V5m0 4v2m-2-2h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                                </svg>
+                                OPEN GRAPH
+                            </button>
+                        </div>
+
+                        <!-- File Brain (RAG over local files) -->
+                        <div class="file-brain-card" style="margin-top:1.1rem;">
+                            <div class="file-brain-header">
+                                <div class="file-brain-left">
+                                    <div class="file-brain-icon">
+                                        <svg width="26" height="26" viewBox="0 0 26 26" fill="none">
+                                            <rect x="3" y="2" width="14" height="18" rx="2" stroke="#00e5ff" stroke-width="1.5" fill="none" opacity="0.7"/>
+                                            <path d="M7 7h6M7 10h6M7 13h4" stroke="#00e5ff" stroke-width="1.2" stroke-linecap="round" opacity="0.6"/>
+                                            <circle cx="20" cy="19" r="5" fill="#050a14" stroke="#69ff47" stroke-width="1.5"/>
+                                            <path d="M18 19l1.5 1.5L22 17" stroke="#69ff47" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/>
+                                        </svg>
+                                    </div>
+                                    <div>
+                                        <div class="file-brain-title">File Brain</div>
+                                        <div class="file-brain-sub">RAG over your PC files — Desktop, Documents, Downloads, OneDrive &amp; more</div>
+                                    </div>
+                                </div>
+                                <div class="file-brain-stats">
+                                    <div class="file-stat-chip"><span id="fb-stat-files">—</span><label>Files</label></div>
+                                    <div class="file-stat-chip"><span id="fb-stat-chunks">—</span><label>Chunks</label></div>
+                                </div>
+                                <button class="btn-fb-index" onclick="triggerFileIndex()" id="fb-index-btn">
+                                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style="margin-right:5px">
+                                        <path d="M7 1v3M7 10v3M1 7h3M10 7h3M3 3l2 2M9 9l2 2M3 11l2-2M9 5l2-2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+                                    </svg>
+                                    INDEX FILES
+                                </button>
+                            </div>
+
+                            <!-- Watched folders list -->
+                            <div id="fb-folders-row" style="margin-top:.7rem;display:flex;flex-wrap:wrap;gap:.4rem;"></div>
+
+                            <!-- Add custom folder -->
+                            <div class="sem-search-bar" style="margin-top:.7rem;">
+                                <input type="text" id="fb-folder-input" class="memory-input" placeholder="Add folder path  e.g. C:\Users\you\Projects" style="font-size:.78rem;">
+                                <button class="btn btn-primary" onclick="addCustomFolder()" style="font-size:.72rem;padding:.4rem .9rem;">+ FOLDER</button>
+                            </div>
+
+                            <!-- File search -->
+                            <div class="sem-search-bar" style="margin-top:.7rem;">
+                                <input type="text" id="fb-search-input" class="memory-input" placeholder="Search your files... e.g. CV, ML notes, project plan, contract" onkeypress="handleFBSearchKey(event)">
+                                <button class="btn btn-primary" onclick="fileSearch()">SEARCH</button>
+                            </div>
+                            <div id="fb-results" class="sem-results-list" style="margin-top:.6rem;">
+                                <div class="memory-empty">Enter a query to search your indexed files.</div>
+                            </div>
+                            <!-- Indexed files list (collapsed) -->
+                            <div style="margin-top:.75rem;">
+                                <button class="fb-toggle-btn" onclick="toggleIndexedFiles()" id="fb-toggle-btn">
+                                    ▸ Show indexed files
+                                </button>
+                                <div id="fb-file-list" style="display:none;margin-top:.5rem;">
+                                    <div class="memory-empty" id="fb-file-list-inner">Loading...</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Semantic Memory Search -->
+                        <div class="mem-section-card" style="margin-top:1.1rem;">
+                            <div class="mem-section-header">
+                                <span class="mem-section-title">RAG Brain</span>
+                                <span class="mem-section-badge">SEMANTIC SEARCH</span>
+                            </div>
+                            <div class="mem-section-sub">Search everything Jarvis has ever learned — powered by neural embeddings</div>
+                            <div class="sem-search-bar" style="margin-top:.75rem;">
+                                <input type="text" id="sem-search-input" class="memory-input" placeholder="e.g. my sister, chess project, morning routine..." onkeypress="handleSemSearchKey(event)">
+                                <button class="btn btn-primary" onclick="semanticSearch()">SEARCH</button>
+                            </div>
+                            <div id="sem-results" class="sem-results-list" style="margin-top:.6rem;">
+                                <div class="memory-empty">Enter a query to search neural memory.</div>
+                            </div>
+                        </div>
+
+                        <!-- Memory Bank -->
+                        <div class="mem-section-card" style="margin-top:1.1rem;">
+                            <div class="mem-section-header">
+                                <span class="mem-section-title">Memory Bank</span>
+                                <div style="display:flex;gap:.5rem;">
+                                    <button class="btn btn-secondary btn-sm" onclick="loadMemoryTab()">REFRESH</button>
+                                </div>
+                            </div>
+                            <div class="mem-section-sub">What JARVIS knows about you — persists across all sessions</div>
+                            <div class="memory-add-block" style="margin-top:.8rem;">
+                                <select id="mem-category" class="memory-select">
+                                    <option value="identity">Identity</option>
+                                    <option value="preferences">Preferences</option>
+                                    <option value="relationships">Relationships</option>
+                                    <option value="projects">Projects</option>
+                                    <option value="wishes">Wishes</option>
+                                    <option value="notes" selected>Notes</option>
+                                </select>
+                                <input type="text" id="mem-key" class="memory-input" placeholder="key (e.g. favorite_food)">
+                                <input type="text" id="mem-value" class="memory-input" placeholder="value (e.g. biryani)">
+                                <button class="btn btn-primary" onclick="addMemory()">SAVE</button>
+                            </div>
+                            <div id="memory-list" class="memory-list" style="margin-top:.7rem;">
+                                <div class="memory-empty">Loading memory bank...</div>
+                            </div>
+                        </div>
+
+                        <!-- Mood History -->
+                        <div class="mem-section-card" style="margin-top:1.1rem;">
+                            <div class="mem-section-header">
+                                <span class="mem-section-title">Mood History</span>
+                                <span class="mem-section-badge">7-DAY PATTERN</span>
+                            </div>
+                            <div class="mem-section-sub">Emotional pattern across sessions</div>
+                            <div id="mood-summary" class="mood-summary" style="margin-top:.6rem;"></div>
+                            <div id="mood-list" class="mood-list" style="margin-top:.5rem;">
+                                <div class="memory-empty">Loading...</div>
+                            </div>
+                        </div>
+
+                        <!-- Follow-up Tracker -->
+                        <div class="mem-section-card" style="margin-top:1.1rem;">
+                            <div class="mem-section-header">
+                                <span class="mem-section-title">Follow-up Tracker</span>
+                                <span class="mem-section-badge">AUTO-DETECTED</span>
+                            </div>
+                            <div class="mem-section-sub">Things you said you'd do — Jarvis checks in on these</div>
+                            <div id="followup-list" class="followup-list" style="margin-top:.7rem;">
+                                <div class="memory-empty">Loading...</div>
+                            </div>
+                        </div>
+
+                        <!-- Session History -->
+                        <div class="mem-section-card" style="margin-top:1.1rem;">
+                            <div class="mem-section-header">
+                                <span class="mem-section-title">Session History</span>
+                                <span class="mem-section-badge">EPISODIC</span>
+                            </div>
+                            <div class="mem-section-sub">What happened in past conversations</div>
+                            <div id="memory-history-list" class="memory-history-list" style="margin-top:.6rem;">
+                                <div class="memory-empty">No session history yet.</div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+
             </section>
         </main>
 
         <!-- Footer -->
         <footer class="footer">
-            <p>Jarvis V1 Dashboard v0.2.0 | Last updated: <span id="footer-time">--:--:--</span></p>
+            <p>JARVIS V1 TACTICAL INTERFACE v1.0 &nbsp;|&nbsp; Last sync: <span id="footer-time">--:--:--</span></p>
         </footer>
+    </div>
+
+    <!-- ── Knowledge Graph Full-Screen Modal ─────────────────────────────── -->
+    <div id="kg-modal" class="kg-modal" style="display:none;" onclick="handleKGModalClick(event)">
+        <div class="kg-modal-inner">
+            <div class="kg-modal-header">
+                <div class="kg-modal-title-block">
+                    <span class="kg-modal-kicker">// NEURAL ENTITY MAP</span>
+                    <h2 class="kg-modal-title">Knowledge Graph</h2>
+                </div>
+                <div class="kg-modal-toolbar">
+                    <input type="text" id="kg-modal-search" class="kg-modal-search" placeholder="Filter entities..." oninput="filterKGNodes(this.value)">
+                    <div class="kg-type-filters" id="kg-type-filters"></div>
+                    <div class="kg-zoom-controls">
+                        <button class="kg-zoom-btn" onclick="kgZoomOut()" title="Zoom Out">−</button>
+                        <span class="kg-zoom-level" id="kg-zoom-level">100%</span>
+                        <button class="kg-zoom-btn" onclick="kgZoomIn()" title="Zoom In">+</button>
+                        <button class="kg-zoom-btn kg-zoom-fit" onclick="kgZoomReset()" title="Fit to screen">⊡</button>
+                    </div>
+                    <button class="kg-close-btn" onclick="closeKGModal()">✕ CLOSE</button>
+                </div>
+            </div>
+            <div class="kg-modal-body">
+                <div class="kg-modal-graph-wrap" id="kg-modal-graph">
+                    <div class="memory-empty" style="margin:auto;padding:3rem;">Loading graph...</div>
+                </div>
+                <aside class="kg-modal-sidebar">
+                    <div class="kg-modal-card" id="kg-modal-stats-card">
+                        <div class="kg-modal-card-title">Network Stats</div>
+                        <div id="kg-modal-stats"></div>
+                    </div>
+                    <div class="kg-modal-card" id="kg-modal-detail-card" style="display:none;">
+                        <div class="kg-modal-card-title" id="kg-modal-detail-title">Selected Entity</div>
+                        <div id="kg-modal-detail"></div>
+                    </div>
+                    <div class="kg-modal-card">
+                        <div class="kg-modal-card-title">Legend</div>
+                        <div class="kg-modal-legend" id="kg-modal-legend"></div>
+                    </div>
+                </aside>
+            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
